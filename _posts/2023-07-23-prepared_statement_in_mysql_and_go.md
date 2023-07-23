@@ -101,7 +101,7 @@ As you can see, there are two additional roundtrips (step 3 + step 4, and step 5
 In Go, there are at least 3 different approaches to work with SQL prepared statements:
 
 - **Explicit prepared statement** and **implicit prepared statement** ******using [standard library](https://github.com/golang/go/tree/master/src/database/sql)
-- **************************************************************Implicit prepared statement************************************************************** using [GORM](https://gorm.io/)
+- **Implicit prepared statement** using [GORM](https://gorm.io/)
 
 ## Explicit Prepared Statement in Standard Library
 
@@ -137,7 +137,7 @@ In [Figure 1](https://www.notion.so/Prepared-Statement-in-MySQL-and-Go-7a81af356
 3    // Send command
 4    err := mc.writeCommandPacketStr(comStmtPrepare, query)
 5    ...
-6    // Read Result
+6    // Read result
 7    columnCount, err := stmt.readPrepareResultPacket()
 8    ...
 9  }
@@ -156,7 +156,7 @@ Back to [Figure 1](https://www.notion.so/Prepared-Statement-in-MySQL-and-Go-7a81
  6      return nil, stmt.mc.markBadConn(err)
  7    }
  8    ...
- 9    // Read Result
+ 9    // Read result
 10    resLen, err := mc.readResultSetHeaderPacket()
 11    if err != nil {
 12      return nil, err
@@ -270,7 +270,7 @@ In [Figure 6](https://www.notion.so/Prepared-Statement-in-MySQL-and-Go-7a81af356
 14    // Send command
 15    err := mc.writeCommandPacketStr(comQuery, query)
 16    if err == nil {
-17      // Read Result
+17      // Read result
 18      var resLen int
 19      resLen, err = mc.readResultSetHeaderPacket()
 20      if err == nil {
