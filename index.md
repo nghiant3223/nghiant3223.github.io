@@ -1,5 +1,3 @@
 ---
-title: Welcome to my blog
+title: nghiant3223
 ---
-
-This is an awesome tech blog!
