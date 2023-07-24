@@ -25,61 +25,61 @@ Presented below is the block of code from company X that has recently encountere
 ```go
 // newDB returns an instance of connection pool.
 func newDB() (*sql.DB, error) {
-	db, err := sql.Open("mysql", "root:password@tcp(127.0.0.1:3306)/demo?charset=utf8mb4&parseTime=True")
-	if err != nil {
-		return nil, err
-	}
+  db, err := sql.Open("mysql", "root:password@tcp(127.0.0.1:3306)/demo?charset=utf8mb4&parseTime=True")
+  if err != nil {
+    return nil, err
+  }
 
-	db.SetMaxOpenConns(10)
-	return db, nil
+  db.SetMaxOpenConns(10)
+  return db, nil
 }
 
 // findUsers returns a list of user whose id in `userIDs` input.
 func findUsers(db *sql.DB, userIDs []int) ([]*User, error) {
-	if len(userIDs) == 0 {
-		return []*User{}, nil
-	}
+  if len(userIDs) == 0 {
+    return []*User{}, nil
+  }
 
-	argUserIDs := make([]interface{}, len(userIDs))
-	for i, id := range userIDs {
-		argUserIDs[i] = id
-	}
+  argUserIDs := make([]interface{}, len(userIDs))
+  for i, id := range userIDs {
+    argUserIDs[i] = id
+  }
 
-	var placeholders string
-	for i := 0; i < len(userIDs); i++ {
-		placeholders += "?"
-		if i != len(userIDs)-1 {
-			placeholders += ","
-		}
-	}
+  var placeholders string
+  for i := 0; i < len(userIDs); i++ {
+    placeholders += "?"
+    if i != len(userIDs)-1 {
+      placeholders += ","
+    }
+  }
 
-	query := fmt.Sprintf("SELECT * FROM users WHERE id IN (%s)", placeholders)
-	stmt, err := db.Prepare(query)
-	if err != nil {
-		return nil, err
-	}
+  query := fmt.Sprintf("SELECT * FROM users WHERE id IN (%s)", placeholders)
+  stmt, err := db.Prepare(query)
+  if err != nil {
+    return nil, err
+  }
 
-	rows, err := stmt.Query(argUserIDs...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+  rows, err := stmt.Query(argUserIDs...)
+  if err != nil {
+    return nil, err
+  }
+  defer rows.Close()
 
-	var users []*User
-	for rows.Next() {
-		var user User
-		if err := rows.Scan(&user.ID, &user.Username, &user.Age); err != nil {
-			return nil, err
-		}
-		users = append(users, &user)
-	}
-	return users, nil
+  var users []*User
+  for rows.Next() {
+    var user User
+    if err := rows.Scan(&user.ID, &user.Username, &user.Age); err != nil {
+      return nil, err
+    }
+    users = append(users, &user)
+  }
+  return users, nil
 }
 ```
 
 When the incident occurred, the system continuously logged the following error message: `Error - 1461: Can't create more than max_prepared_stmt_count statements (current value: 16382)`. As a result of this error, every `CREATE`, `SELECT`, `UPDATE`, and `DELETE` command failed with the error mentioned earlier, rendering the service unavailable for several hours.
 
-Just to provide you with some background information, MySQL incorporates a system variable known as `[max_prepared_stmt_count](https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_max_prepared_stmt_count)`. This variable establishes a threshold for the maximum number of prepared statements permitted on the server, encompassing all connections. If the limit is reached and the client persists in requesting the server to prepare additional statements, the server will issue an error message: `Error 1461: Can't create more than max_prepared_stmt_count statements (current value: ...)`. Notably, the default value assigned to this variable is 16382, as indicated in the previously mentioned error message.
+Just to provide you with some background information, MySQL incorporates a system variable known as [`max_prepared_stmt_count`](https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_max_prepared_stmt_count). This variable establishes a threshold for the maximum number of prepared statements permitted on the server, encompassing all connections. If the limit is reached and the client persists in requesting the server to prepare additional statements, the server will issue an error message: `Error 1461: Can't create more than max_prepared_stmt_count statements (current value: ...)`. Notably, the default value assigned to this variable is 16382, as indicated in the previously mentioned error message.
 
 But why did the incident take place? Let's examine the function `findUsers` more closely. In `findUsers`, different value placeholders are created for varying lengths of `userIDs`, causing the database to generate distinct prepared statements. The error mentioned above occurs when there are more than 16382 unique prepared statements.
 
@@ -104,7 +104,7 @@ In Go, there are at least 3 different approaches to work with SQL prepared state
 
 ## Explicit Prepared Statement in Standard Library
 
-**TL;DR**: The client uses `db.Prepare` to request the server to prepare a statement, sending the [COM_STMT_PREPARE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html) command. In response, the server provides a statement ID. Subsequently, the client employs `stmt.QueryRow` to send the [COM_STMT_EXECUTE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_execute.html) command, requesting the server to execute the statement. Lastly, the client uses `stmt.Close` to send the [COM_STMT_CLOSE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_close.html) command, asking the server to close the prepared statement.
+**TL;DR**: The client uses `db.Prepare` to request the server to prepare a statement, sending the [`COM_STMT_PREPARE`](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html) command. In response, the server provides a statement ID. Subsequently, the client employs `stmt.QueryRow` to send the [COM_STMT_EXECUTE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_execute.html) command, requesting the server to execute the statement. Lastly, the client uses `stmt.Close` to send the [COM_STMT_CLOSE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_close.html) command, asking the server to close the prepared statement.
 
 This is an code snippet that describes how you can use explicit prepared statement:
 
@@ -144,7 +144,7 @@ In [Figure 1](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cf
 11  }
 ```
 
-Let’s analyze [Figure 2](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md). In this figure, we can see that at line 6, the method `writeCommandPacketStr` sends command [COM_STMT_PREPARE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html) to the server. Then, at line 9, the client reads the [COM_STMT_PREPARE response](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html#sect_protocol_com_stmt_prepare_response) to extract the statement ID that server has prepared and saves it to the variable `stmt` (more details can be found [here](https://github.com/go-sql-driver/mysql/blob/v1.7.1/packets.go#L838)).
+Let’s analyze [Figure 2](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md). In this figure, we can see that at line 6, the method `writeCommandPacketStr` sends command [`COM_STMT_PREPARE`](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html) to the server. Then, at line 9, the client reads the [`COM_STMT_PREPARE` response](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html#sect_protocol_com_stmt_prepare_response) to extract the statement ID that server has prepared and saves it to the variable `stmt` (more details can be found [here](https://github.com/go-sql-driver/mysql/blob/v1.7.1/packets.go#L838)).
 
 Back to [Figure 1](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md), the client sends statement ID along with corresponding arguments to the server by `stmt.QueryRow(id)`. Note that the parameter `id` here is the ID of the `Album` in question, not the statement ID. Internally, `QueryRow` will eventually invoke the method `query` of `*mysqlStmt` as in [Figure 3](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md). The method `writeExecutePacket` sends command [COM_STMT_EXECUTE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_execute.html) to the server. This command instructs the server to execute a prepared statement based on the statement ID provided. After that, in the method `readResultSetHeaderPacket`, the clients read the [COM_STMT_EXECUTE response](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_execute_response.html) to extract the result set and convert it to an instance of `binaryRows`. 
 
@@ -175,7 +175,7 @@ Back to [Figure 1](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4a
 24  }
 ```
 
-The `Scan` method in [Figure 1](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md) will use this instance to scan an instance of `Album`. At the end of [Figure 1](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md), `rows.Close()` is called, which will invoke the method `Close` of `*myStmt` as [Figure 4](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md). In the method `writeCommandPacketUint32`, the client sends command [COM_STMT_CLOSE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_close.html) to the server to make the prepared statement deallocated, ensuring no memory leak occurs.
+The `Scan` method in [Figure 1](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md) will use this instance to scan an instance of `Album`. At the end of [Figure 1](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md), `rows.Close()` is called, which will invoke the method `Close` of `*myStmt` as [Figure 4](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md). In the method `writeCommandPacketUint32`, the client sends command [`COM_STMT_CLOSE`](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_close.html) to the server to make the prepared statement deallocated, ensuring no memory leak occurs.
 
 ```go
  1  package mysql
@@ -189,9 +189,9 @@ The `Scan` method in [Figure 1](Prepared%20Statement%20in%20MySQL%20and%20Go%207
 
 ## Implicit Prepared Statement in Standard Library
 
-**TL;DR**: The client utilizes `db.Query` to send the [COM_STMT_PREPARE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html) and [COM_STMT_EXECUTE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_execute.html) commands to the server, requesting it to prepare and execute a statement. Finally, the client employs `stmt.Close` to send the [COM_STMT_CLOSE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_close.html) command to the server, asking it to close the prepared statement. If the `[InterpolateParams](https://github.com/go-sql-driver/mysql#interpolateparams)` configuration is enabled, the client will send command [COM_QUERY](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query.html) and let the server execute the statement filled with interpolated arguments instead of using a prepared statement.
+**TL;DR**: The client utilizes `db.Query` to send the [`COM_STMT_PREPARE`](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html) and [`COM_STMT_EXECUTE`](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_execute.html) commands to the server, requesting it to prepare and execute a statement. Finally, the client employs `stmt.Close` to send the [`COM_STMT_CLOSE`](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_close.html) command to the server, asking it to close the prepared statement. If the [`InterpolateParams`](https://github.com/go-sql-driver/mysql#interpolateparams) configuration is enabled, the client will send command [`COM_QUERY`](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query.html) and let the server execute the statement filled with interpolated arguments instead of using a prepared statement.
 
-Working with implicit prepared statement is easier by passing prepared statement arguments (`id` in [Figure 5](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md)) to `db.Query` apart from the SQL statement as first argument. If there is no prepared statement argument, the client sends a non-prepared statement to the database server (i.e. the client sends command [COM_QUERY](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query.html) instead of [COM_STMT_PREPARE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html) to the server).
+Working with implicit prepared statement is easier by passing prepared statement arguments (`id` in [Figure 5](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md)) to `db.Query` apart from the SQL statement as first argument. If there is no prepared statement argument, the client sends a non-prepared statement to the database server (i.e. the client sends command [`COM_QUERY`](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query.html) instead of [`COM_STMT_PREPARE`](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html) to the server).
 
 ```go
  1   db, err := sql.Open("mysql", "mysql://user:pass@localhost:3306/dbname")
@@ -258,7 +258,7 @@ Line 6 in [Figure 5](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee
 41  }
 ```
 
-In [Figure 6](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md), `ctxDriverQuery` will invokes method `query` of `*mysqlConn` as shown [Figure 7](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md). In the `query` method, the client first checks the flag `InterpolateParams` to decide whether or not to use a non-prepared statement. If this flag is `true` and there are at least one arguments then it will 1) interpolate parameters and feed them into the statement, 2) send the [COM_QUERY](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query.html) to the database with the statement `SELECT * FROM album WHERE id = 322` for example, 3) read the [COM_QUERY response](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query_response.html) to extract the result set and 4) convert the response to an instance of `textRows`. Else, it returns `driver.ErrSkip` to the caller (i.e. `queryDC` in [Figure 6](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md)).
+In [Figure 6](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md), `ctxDriverQuery` will invokes method `query` of `*mysqlConn` as shown [Figure 7](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md). In the `query` method, the client first checks the flag `InterpolateParams` to decide whether or not to use a non-prepared statement. If this flag is `true` and there are at least one arguments then it will 1) interpolate parameters and feed them into the statement, 2) send the [`COM_QUERY`](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query.html) to the database with the statement `SELECT * FROM album WHERE id = 322` for example, 3) read the [`COM_QUERY` response](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query_response.html) to extract the result set and 4) convert the response to an instance of `textRows`. Else, it returns `driver.ErrSkip` to the caller (i.e. `queryDC` in [Figure 6](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md)).
 
 ```go
  1  package mysql
@@ -293,7 +293,7 @@ In [Figure 6](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cf
 30  }
 ```
 
-If `InterpolateParams` is `false`, the control will be back at line 22 in [Figure 6](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md), or line 6 in [Figure 6.1](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md). `ctxDriverPrepare` will invoke the method `Prepare` of `*mysqlConn` as in [Figure 2](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md), in which the client sends command **[COM_STMT_PREPARE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html)** to the server. Next, `rowsiFromStatement` will eventually invokes the method `query` of `*mysqlStmt` as in [Figure 3](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md), in which the client sends command **[COM_STMT_EXECUTE](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_execute.html)** to the server.
+If `InterpolateParams` is `false`, the control will be back at line 22 in [Figure 6](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md), or line 6 in [Figure 6.1](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md). `ctxDriverPrepare` will invoke the method `Prepare` of `*mysqlConn` as in [Figure 2](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md), in which the client sends command [`COM_STMT_PREPARE`](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html) to the server. Next, `rowsiFromStatement` will eventually invokes the method `query` of `*mysqlStmt` as in [Figure 3](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md), in which the client sends command [`COM_STMT_EXECUTE`](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_execute.html) to the server.
 
 ```go
  1  package sql
@@ -327,7 +327,7 @@ Afterward, the control is back at line 13 in [Figure 5](Prepared%20Statement%20i
 
 ## Implicit Prepared Statement in GORM
 
-In GORM, the logic is the same as implicit prepared statement in standard library because every DML (e.g. `Create`, `Find`, `First`, `Take`, `Update`, `Delete`) eventually invokes `queryDC` in [Figure 6](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md) or `[execDC](https://github.com/golang/go/blob/go1.20/src/database/sql/sql.go#L1658-L1695)`. If there is no prepared statement arguments (i.e. `db.Statement.Vars` is empty), GORM never uses prepared statement. If there is at least one arguments (i.e. `db.Statement.Vars` is not empty), whether prepared statement is used or not depends on whether the configuration `InterpolateParams` is `true` or `false`.
+In GORM, the logic is the same as implicit prepared statement in standard library because every DML (e.g. `Create`, `Find`, `First`, `Take`, `Update`, `Delete`) eventually invokes `queryDC` in [Figure 6](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md) or [execDC](https://github.com/golang/go/blob/go1.20/src/database/sql/sql.go#L1658-L1695). If there is no prepared statement arguments (i.e. `db.Statement.Vars` is empty), GORM never uses prepared statement. If there is at least one arguments (i.e. `db.Statement.Vars` is not empty), whether prepared statement is used or not depends on whether the configuration `InterpolateParams` is `true` or `false`.
 
 ```go
 package callbacks
@@ -383,7 +383,7 @@ When we use explicit prepared statement, it is important to invoke both `stmt.Cl
 
 When we use implicit prepared statement of standard library, we should always call `rows.Close` as line 10 in [Figure 5](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md). `rows.Close` not only returns the connection to the pool but also closes the prepared statement.
 
-When using GORM, there is no requirement to manually close `SELECT` prepared statements since GORM handles this internally (more details can be found [here](https://github.com/go-gorm/gorm/blob/master/callbacks/query.go#L26)). For `CREATE`, `UPDATE`, and `DELETE` statements, GORM eventual invokes the standard library method `[execDC](https://github.com/golang/go/blob/go1.20/src/database/sql/sql.go#L1658-L1695)`, which automatically closes the prepared statement at the [end](https://github.com/golang/go/blob/go1.20/src/database/sql/sql.go#L1693) of this method's execution.
+When using GORM, there is no requirement to manually close `SELECT` prepared statements since GORM handles this internally (more details can be found [here](https://github.com/go-gorm/gorm/blob/master/callbacks/query.go#L26)). For `CREATE`, `UPDATE`, and `DELETE` statements, GORM eventual invokes the standard library method [`execDC`](https://github.com/golang/go/blob/go1.20/src/database/sql/sql.go#L1658-L1695), which automatically closes the prepared statement at the [end](https://github.com/golang/go/blob/go1.20/src/database/sql/sql.go#L1693) of this method's execution.
 
 By ensuring that prepared statements are closed after completing their tasks, we can effectively prevent the total number of prepared statements on the server from surpassing the limit set by the system variable [max_prepared_stmt_count](https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_max_prepared_stmt_count). Thus, it eliminates the likelihood of the error in the incident.
 
@@ -413,11 +413,11 @@ Because prepared statement requires additional round trip, if the network betwee
 
 In terms of efficiency, if a query is executed only once and closed immediately, the prepared statement is worse than a non-prepared statement. The prepared statement is only efficient if it is prepared once, executed many times and is closed at the end. *maniwood* has a [blog post](https://www.manniwood.com/2019_04_28/go_pg_stmt.html) that demonstrates the effectiveness and efficiency of reusing prepared statements.
 
-However, we can leverage GORM to reuse prepared statements as much as possible. In GORM, there is a configuration called `[PrepareStmt](https://github.com/go-gorm/gorm/blob/v1.25.2/gorm.go#L35)` that, when enabled, uses a connection pool called `[PreparedStmtDB](https://github.com/go-gorm/gorm/blob/v1.25.2/prepare_stmt.go#L17-L22)` to cache prepared statements. Unlike the default connection pool, which prepares, executes, and closes a statement, the `[PreparedStmtDB](https://github.com/go-gorm/gorm/blob/v1.25.2/prepare_stmt.go#L17-L22)` connection pool takes a different approach. The implementation of `[PreparedStmtDB](https://github.com/go-gorm/gorm/blob/v1.25.2/prepare_stmt.go#L17-L22)` is described in [Figure 9](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md).
+However, we can leverage GORM to reuse prepared statements as much as possible. In GORM, there is a configuration called [`PrepareStmt`](https://github.com/go-gorm/gorm/blob/v1.25.2/gorm.go#L35) that, when enabled, uses a connection pool called [`PreparedStmtDB`](https://github.com/go-gorm/gorm/blob/v1.25.2/prepare_stmt.go#L17-L22) to cache prepared statements. Unlike the default connection pool, which prepares, executes, and closes a statement, the [`PreparedStmtDB`](https://github.com/go-gorm/gorm/blob/v1.25.2/prepare_stmt.go#L17-L22) connection pool takes a different approach. The implementation of [`PreparedStmtDB`](https://github.com/go-gorm/gorm/blob/v1.25.2/prepare_stmt.go#L17-L22) is described in [Figure 9](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cfcff80ac65fa49.md).
 
-`[PreparedStmtDB](https://github.com/go-gorm/gorm/blob/v1.25.2/prepare_stmt.go#L17-L22)` checks application’s local in-memory cache to determine if the statement has already been prepared. If it has, the prepared statement is used for execution. If it has not been prepared yet, `[PreparedStmtDB](https://github.com/go-gorm/gorm/blob/v1.25.2/prepare_stmt.go#L17-L22)` asks server to prepare the statement, saves it to the application’s local in-memory cache, and then requests the server to execute the statement.
+[`PreparedStmtDB`](https://github.com/go-gorm/gorm/blob/v1.25.2/prepare_stmt.go#L17-L22) checks application’s local in-memory cache to determine if the statement has already been prepared. If it has, the prepared statement is used for execution. If it has not been prepared yet, [`PreparedStmtDB`](https://github.com/go-gorm/gorm/blob/v1.25.2/prepare_stmt.go#L17-L22) asks server to prepare the statement, saves it to the application’s local in-memory cache, and then requests the server to execute the statement.
 
-When we no longer needs `[PreparedStmtDB](https://github.com/go-gorm/gorm/blob/v1.25.2/prepare_stmt.go#L17-L22)` connection pool, we should close it by `Close` method. This method will eventually ask the server to close every cached prepared statement.
+When we no longer needs [`PreparedStmtDB`](https://github.com/go-gorm/gorm/blob/v1.25.2/prepare_stmt.go#L17-L22) connection pool, we should close it by `Close` method. This method will eventually ask the server to close every cached prepared statement.
 
 ```go
  1  package gorm
