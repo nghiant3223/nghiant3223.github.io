@@ -357,17 +357,10 @@ result, err := db.Statement.ConnPool.ExecContext(
 
 According to the original [document](http://go-database-sql.org/prepared.html) of `database/sql`:
 
-> At the database level, a prepared statement is bound to a single database connection. The typical flow is that the client sends a SQL statement with placeholders to the server for preparation, the server responds with a statement ID, and then the client executes the statement by sending its ID and parameters.
-
-In Go, however, connections are not exposed directly to the user of the `database/sql` package. You don’t prepare a statement on a connection. You prepare it on a `DB` or a `Tx`. And `database/sql` has some convenience behaviors such as automatic retries. For these reasons, the underlying association between prepared statements and connections, which exists at the driver level, is hidden from your code.
-
-Here’s how it works:
-1. When you prepare a statement, it’s prepared on a connection in the pool.
-2. The `Stmt` object remembers which connection was used.
-3. When you execute the `Stmt`, it tries to use the connection. If it’s not available because it’s closed or busy doing something else, it gets another connection from the pool *and re-prepares the statement with the database on another connection.*
-
+> At the database level, a prepared statement is bound to a single database connection. The typical flow is that the client sends a SQL statement with placeholders to the server for preparation, the server responds with a statement ID, and then the client executes the statement by sending its ID and parameters.<br/><br/>
+In Go, however, connections are not exposed directly to the user of the `database/sql` package. You don’t prepare a statement on a connection. You prepare it on a `DB` or a `Tx`. And `database/sql` has some convenience behaviors such as automatic retries. For these reasons, the underlying association between prepared statements and connections, which exists at the driver level, is hidden from your code.<br/><br/>
+Here’s how it works:<br/>1. When you prepare a statement, it’s prepared on a connection in the pool.<br/>2. The `Stmt` object remembers which connection was used.<br/>3. When you execute the `Stmt`, it tries to use the connection. If it’s not available because it’s closed or busy doing something else, it gets another connection from the pool *and re-prepares the statement with the database on another connection.*<br/><br/>
 Because statements will be re-prepared as needed when their original connection is busy, it’s possible for high-concurrency usage of the database, which may keep a lot of connections busy, to create a large number of prepared statements. This can result in apparent leaks of statements, statements being prepared and re-prepared more often than you think, and even running into server-side limits on the number of statements.
-> 
 
 Due to the fact that prepared statements are re-prepared whenever their original connection is busy, the occurrence of the error in the incident, specifically `Error - 1461: Can't create more than max_prepared_stmt_count statements (current value: ...)` is more likely. Therefore, it is crucial to handle prepared statements with caution and employ appropriate strategies.
 
@@ -395,9 +388,9 @@ In [Figure 0](Prepared%20Statement%20in%20MySQL%20and%20Go%207a81af3563ee4ad69cf
 
 By setting **not** too long lifetime for a connection, we can reduce the risk that the total number of prepared statements on the server is less likely to surpass the limit set by the system variable [max_prepared_stmt_count](https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_max_prepared_stmt_count).
 
-## Enable `**InterpolateParams**`
+## Enable `InterpolateParams`
 
-If **`InterpolateParams`** is set to true, placeholders are replaced with interpolated arguments to form a complete statement, and the client will request the server to execute this statement. When `InterpolateParams` is enabled, `db.Query("SELECT * FROM album WHERE title = ?", "L'Amour, Les Baguettes")` will form a complete statement: `SELECT * FROM album WHERE title = 'L\'Amour, Les Baguettes'`. By sending and executing the complete statement on the database server, the number of roundtrips mentioned earlier is significantly reduced, resulting in potential performance improvements. 
+If `InterpolateParams` is set to true, placeholders are replaced with interpolated arguments to form a complete statement, and the client will request the server to execute this statement. When `InterpolateParams` is enabled, `db.Query("SELECT * FROM album WHERE title = ?", "L'Amour, Les Baguettes")` will form a complete statement: `SELECT * FROM album WHERE title = 'L\'Amour, Les Baguettes'`. By sending and executing the complete statement on the database server, the number of roundtrips mentioned earlier is significantly reduced, resulting in potential performance improvements. 
 
 To configure `InterpolateParams`, you can add the query parameter `interpolateParams` to the DSN like this: `mysql://user:pass@localhost:3306/dbname?interpolateParams=true`.
 
@@ -474,7 +467,7 @@ Unfortunately, there is a problem with the current (v1.25.2) implementation of `
 
 Apart from using prepared statement properly, we also need monitoring to detect something abnormal with prepared statements.
 
-Firstly, it is highly advisable to thoroughly review the current value assigned to the system variable **`max_prepared_stmt_count`** and ensure that it is appropriately configured to accommodate the anticipated workload.
+Firstly, it is highly advisable to thoroughly review the current value assigned to the system variable `max_prepared_stmt_count` and ensure that it is appropriately configured to accommodate the anticipated workload.
 
 Next, it is imperative to closely monitor the frequency of prepared statement execution and carefully assess the lifespan of these statements. If a prepared statement is seldom executed but remains active for an extended period, it may indicate a potential leakage.
 
