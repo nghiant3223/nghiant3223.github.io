@@ -332,22 +332,22 @@ In GORM, the logic is the same as implicit prepared statement in standard librar
 ```go
 package callbacks
 
-// Create ([source](https://github.com/go-gorm/gorm/blob/master/callbacks/create.go#L97-99))
+// Create (https://github.com/go-gorm/gorm/blob/master/callbacks/create.go#L97-99)
 result, err := db.Statement.ConnPool.ExecContext(
 	db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...,
 )
 
-// Find, First, Take ([source](https://github.com/go-gorm/gorm/blob/master/callbacks/query.go#L20))
+// Find, First, Take (https://github.com/go-gorm/gorm/blob/master/callbacks/query.go#L20)
 rows, err := db.Statement.ConnPool.QueryContext(
 	db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...
 )
 
-// Update ([source](https://github.com/go-gorm/gorm/blob/master/callbacks/update.go#L97))
+// Update (https://github.com/go-gorm/gorm/blob/master/callbacks/update.go#L97)
 result, err := db.Statement.ConnPool.ExecContext(
 	db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...
 )
 
-// Delete ([source](https://github.com/go-gorm/gorm/blob/master/callbacks/delete.go#L159))
+// Delete (https://github.com/go-gorm/gorm/blob/master/callbacks/delete.go#L159)
 result, err := db.Statement.ConnPool.ExecContext(
 	db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...
 )
