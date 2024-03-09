@@ -137,9 +137,10 @@ Record lock, heap no 7 PHYSICAL RECORD: n_fields 5; compact format; info bits 0
 *** WE ROLL BACK TRANSACTION (2)
 ```
 
-One may ask, "Why does deadlock happen even for the highest isolation level, i.e., SERIALIZABLE?" Let's refer to the MySQL documentation:
+One may ask, "Why does deadlock happen even for the highest isolation level, i.e., SERIALIZABLE?".
 
-"SERIALIZABLE: This level is like REPEATABLE READ, but InnoDB implicitly converts all plain SELECT statements to SELECT ... FOR SHARE if autocommit is disabled. If autocommit is enabled, the SELECT is its own transaction. It therefore is known to be read-only and can be serialized if performed as a consistent (nonlocking) read and need not block for other transactions."
+Let's refer to the MySQL [documentation](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html#:~:text=READ%20COMMITTED.-,SERIALIZABLE,-This%20level%20is):
+> SERIALIZABLE: This level is like REPEATABLE READ, but InnoDB implicitly converts all plain SELECT statements to SELECT ... FOR SHARE if autocommit is disabled. If autocommit is enabled, the SELECT is its own transaction. It therefore is known to be read-only and can be serialized if performed as a consistent (nonlocking) read and need not block for other transactions.
 
 We can see that the SERIALIZABLE isolation level has nothing to do with the INSERT statement. Therefore, deadlock can definitely happen in the SERIALIZABLE isolation level.
 
