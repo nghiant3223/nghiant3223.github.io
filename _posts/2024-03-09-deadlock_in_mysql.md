@@ -34,7 +34,7 @@ INSERT INTO `t` (a, b) VALUES (10, 10), (20, 20), (30, 30), (40, 40), (50, 50);
 
 ## Scenario 1: Insert The Same Primary Key
 
-Different sessions want to `INSERT` records with the same primary key at the same time can cause deadlock in every isolation level. This also applies for `INSERT ... ON DUPLICATE KEY ...` statement.
+Different sessions attempting to `INSERT` records with the same primary key at the same time can cause deadlock at every isolation level. This also applies to the `INSERT ... ON DUPLICATE KEY ...` statement.
 
 Below is an example results in deadlock, in which isolation level `SERIALIZABLE` is used.
 
@@ -42,11 +42,11 @@ Below is an example results in deadlock, in which isolation level `SERIALIZABLE`
 |-----------|-----------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|
 | T1        | SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;<br/>START TRANSACTION;<br/>INSERT INTO t(id,a,b) VALUES (45,45,1) ON DUPLICATE KEY UPDATE b=-1; |                                                                                         |                                                                                         |
 | T2        |                                                                                         | SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;<br/>START TRANSACTION;<br/>INSERT INTO t(id,a,b) VALUES (45,45,2) ON DUPLICATE KEY UPDATE b=-1; |                                                                                         |
-| T3        |                                                                                         |                                                                                         | SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;<br/>START TRANSACTION;<br/>INSERT INTO t(id,a,b) VALUES (45,45,2) ON DUPLICATE KEY UPDATE b=-1; |
+| T3        |                                                                                         |                                                                                         | SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;<br/>START TRANSACTION;<br/>INSERT INTO t(id,a,b) VALUES (45,45,3) ON DUPLICATE KEY UPDATE b=-1; |
 | T4        | ROLLBACK;                                                                               |                                                                                         |                                                                                         |
 | T5        |                                                                                         | 1 rows affected                                                                        | Deadlock found when trying to get lock; try restarting transaction                      |
 
-After T3, locks are as below:
+After T3, lock data are as below:
 ```
 mysql> SELECT ENGINE_TRANSACTION_ID, INDEX_NAME, LOCK_TYPE, LOCK_MODE, LOCK_STATUS, LOCK_DATA FROM performance_schema.data_locks WHERE OBJECT_NAME='t';
 +-----------------------+------------+-----------+---------------+-------------+-----------+
@@ -61,7 +61,7 @@ mysql> SELECT ENGINE_TRANSACTION_ID, INDEX_NAME, LOCK_TYPE, LOCK_MODE, LOCK_STAT
 +-----------------------+------------+-----------+---------------+-------------+-----------+
 ```
 
-After T4, locks are as below:
+After T4, lock data are as below:
 ```
 mysql> SELECT ENGINE_TRANSACTION_ID, INDEX_NAME, LOCK_TYPE, LOCK_MODE, LOCK_STATUS, LOCK_DATA FROM performance_schema.data_locks WHERE OBJECT_NAME='t';
 +-----------------------+------------+-----------+------------------------+-------------+-----------+
@@ -75,7 +75,7 @@ mysql> SELECT ENGINE_TRANSACTION_ID, INDEX_NAME, LOCK_TYPE, LOCK_MODE, LOCK_STAT
 ```
 
 
-After T4, deadlock is as below:
+After T4, deadlock information are as below:
 ```
 ------------------------
 LATEST DETECTED DEADLOCK
@@ -136,3 +136,13 @@ Record lock, heap no 7 PHYSICAL RECORD: n_fields 5; compact format; info bits 0
 
 *** WE ROLL BACK TRANSACTION (2)
 ```
+
+One may ask, "Why does deadlock happen even for the highest isolation level, i.e., SERIALIZABLE?" Let's refer to the MySQL documentation:
+
+"SERIALIZABLE: This level is like REPEATABLE READ, but InnoDB implicitly converts all plain SELECT statements to SELECT ... FOR SHARE if autocommit is disabled. If autocommit is enabled, the SELECT is its own transaction. It therefore is known to be read-only and can be serialized if performed as a consistent (nonlocking) read and need not block for other transactions."
+
+We can see that the SERIALIZABLE isolation level has nothing to do with the INSERT statement. Therefore, deadlock can definitely happen in the SERIALIZABLE isolation level.
+
+## References
+
+- https://cloud.tencent.com/developer/article/2326843
