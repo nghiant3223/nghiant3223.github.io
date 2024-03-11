@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Deadlock In MySQL | Melatoni</title>
+<meta name="generator" content="Jekyll v3.10.0" />
+<meta property="og:title" content="Deadlock In MySQL" />
+<meta name="author" content="nghiant3223@gmail.com" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Deadlock In MySQL" />
+<meta property="og:description" content="Deadlock In MySQL" />
+<link rel="canonical" href="http://localhost:4000/2024/03/09/deadlock_in_mysql.html" />
+<meta property="og:url" content="http://localhost:4000/2024/03/09/deadlock_in_mysql.html" />
+<meta property="og:site_name" content="Melatoni" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2024-03-09T00:00:00+07:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Deadlock In MySQL" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"nghiant3223@gmail.com"},"dateModified":"2024-03-09T00:00:00+07:00","datePublished":"2024-03-09T00:00:00+07:00","description":"Deadlock In MySQL","headline":"Deadlock In MySQL","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2024/03/09/deadlock_in_mysql.html"},"url":"http://localhost:4000/2024/03/09/deadlock_in_mysql.html"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="Melatoni" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">Melatoni</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <link rel="stylesheet" href="/assets/fonts/style.css">
+
+<style>
+    body {
+        font-family: 'Minion 3', serif;
+    }
+
+    th {
+        padding: unset !important;
+    }
+
+    table {
+        margin-bottom: 15px;
+    }
+
+    code {
+        font-family: 'Source Code Pro', monospace;
+    }
+
+    blockquote {
+        font-style: normal;
+        letter-spacing: normal;
+    }
+
+    path {
+        stroke-width: 1px !important;
+    }
+</style>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[href^='http']").forEach(function (link) {
+            link.setAttribute("target", "_blank");
+            link.setAttribute("rel", "noopener noreferrer");
+        });
+    });
+</script>
+
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'base',
+        themeVariables: {
+            fontSize: '32px',
+            fontFamily: 'Source Code Pro',
+        }
+    });
+</script>
+
+<h1 id="deadlock-in-mysql">Deadlock In MySQL</h1>
+
+<h2 id="introduction">Introduction</h2>
+
+<p>Deadlocks in MySQL can be a significant challenge for database administrators and developers alike. A deadlock occurs when two or more transactions are each waiting for a resource locked by the other, resulting in a circular waiting pattern that halts progress. Understanding how deadlocks happen, their implications, and strategies to mitigate them is crucial for maintaining the stability and performance of MySQL databases.</p>
+
+<p>In this blog, we will delve into the intricacies of deadlocks in MySQL. We will explore common scenarios that lead to deadlocks, discuss the impact they can have on application performance, and provide practical approaches to prevent and manage them effectively.</p>
+
+<h2 id="demonstration">Demonstration</h2>
+
+<p>To illustrate the occurrence and resolution of deadlocks in MySQL, let’s walk through a practical demonstration. In this scenario, we’ll create a simple database schema and perform transactions that can potentially lead to deadlocks. We’ll then analyze the deadlock situation and implement strategies to mitigate and resolve it.</p>
+
+<p>Please note that the demonstration below is conducted using MySQL 8.0.32.</p>
+
+<h2 id="preparation">Preparation</h2>
+
+<div class="language-sql highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">CREATE</span> <span class="k">SCHEMA</span> <span class="n">IF</span> <span class="k">NOT</span> <span class="k">EXISTS</span> <span class="nv">`deadlock_playground`</span><span class="p">;</span>
+
+<span class="n">USE</span> <span class="nv">`deadlock_playground`</span><span class="p">;</span>
+
+<span class="k">CREATE</span> <span class="k">TABLE</span> <span class="nv">`t`</span>
+<span class="p">(</span>
+    <span class="nv">`id`</span> <span class="nb">INT</span> <span class="k">NOT</span> <span class="k">NULL</span> <span class="n">AUTO_INCREMENT</span><span class="p">,</span>
+    <span class="nv">`a`</span>  <span class="nb">INT</span><span class="p">,</span>
+    <span class="nv">`b`</span>  <span class="nb">INT</span><span class="p">,</span>
+    <span class="k">PRIMARY</span> <span class="k">KEY</span> <span class="p">(</span><span class="nv">`id`</span><span class="p">),</span>
+    <span class="k">UNIQUE</span> <span class="k">INDEX</span> <span class="n">uq_a</span> <span class="p">(</span><span class="nv">`a`</span><span class="p">)</span>
+<span class="p">);</span>
+
+<span class="k">INSERT</span> <span class="k">INTO</span> <span class="nv">`t`</span> <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span> <span class="k">VALUES</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="mi">20</span><span class="p">),</span> <span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="mi">30</span><span class="p">),</span> <span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="mi">40</span><span class="p">),</span> <span class="p">(</span><span class="mi">50</span><span class="p">,</span> <span class="mi">50</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h2 id="scenario-1-insert-the-same-primary-key">Scenario 1: Insert The Same Primary Key</h2>
+
+<p>Different sessions attempting to <code class="language-plaintext highlighter-rouge">INSERT</code> records with the same primary key at the same time can cause deadlock at every isolation level. This also applies to the <code class="language-plaintext highlighter-rouge">INSERT ... ON DUPLICATE KEY ...</code> statement.</p>
+
+<p>Below is an example results in deadlock, in which isolation level SERIALIZABLE is used.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Timestamp</th>
+      <th>Session 1</th>
+      <th>Session 2</th>
+      <th>Session 3</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>T1</td>
+      <td>SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;<br /><br />START TRANSACTION;<br />// transaction ID 1934<br /><br />INSERT INTO t(id,a,b) VALUES (45,45,1) ON DUPLICATE KEY UPDATE b=-1;</td>
+      <td> </td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td>T2</td>
+      <td> </td>
+      <td>SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;<br /><br />START TRANSACTION;<br />// transaction ID 1935<br /><br />INSERT INTO t(id,a,b) VALUES (45,45,2) ON DUPLICATE KEY UPDATE b=-1;</td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td>T3</td>
+      <td> </td>
+      <td> </td>
+      <td>SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;<br /><br />START TRANSACTION;<br />// transaction ID 1936<br /><br />INSERT INTO t(id,a,b) VALUES (45,45,3) ON DUPLICATE KEY UPDATE b=-1;</td>
+    </tr>
+    <tr>
+      <td>T4</td>
+      <td>ROLLBACK;</td>
+      <td> </td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td>T5</td>
+      <td> </td>
+      <td>1 rows affected</td>
+      <td>Deadlock found when trying to get lock; try restarting transaction</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>After T3, lock data are as below:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mysql&gt; SELECT ENGINE_TRANSACTION_ID, INDEX_NAME, LOCK_TYPE, LOCK_MODE, LOCK_STATUS, LOCK_DATA FROM performance_schema.data_locks WHERE OBJECT_NAME='t';
++-----------------------+------------+-----------+---------------+-------------+-----------+
+| ENGINE_TRANSACTION_ID | INDEX_NAME | LOCK_TYPE | LOCK_MODE     | LOCK_STATUS | LOCK_DATA |
++-----------------------+------------+-----------+---------------+-------------+-----------+
+|                  1936 | NULL       | TABLE     | IX            | GRANTED     | NULL      |
+|                  1936 | PRIMARY    | RECORD    | X,REC_NOT_GAP | WAITING     | 45        |
+|                  1935 | NULL       | TABLE     | IX            | GRANTED     | NULL      |
+|                  1935 | PRIMARY    | RECORD    | X,REC_NOT_GAP | WAITING     | 45        |
+|                  1934 | NULL       | TABLE     | IX            | GRANTED     | NULL      |
+|                  1934 | PRIMARY    | RECORD    | X,REC_NOT_GAP | GRANTED     | 45        |
++-----------------------+------------+-----------+---------------+-------------+-----------+
+</code></pre></div></div>
+
+<p>After T4, lock data are as below:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>mysql&gt; SELECT ENGINE_TRANSACTION_ID, INDEX_NAME, LOCK_TYPE, LOCK_MODE, LOCK_STATUS, LOCK_DATA FROM performance_schema.data_locks WHERE OBJECT_NAME='t';
++-----------------------+------------+-----------+------------------------+-------------+-----------+
+| ENGINE_TRANSACTION_ID | INDEX_NAME | LOCK_TYPE | LOCK_MODE              | LOCK_STATUS | LOCK_DATA |
++-----------------------+------------+-----------+------------------------+-------------+-----------+
+|                  1935 | NULL       | TABLE     | IX                     | GRANTED     | NULL      |
+|                  1935 | PRIMARY    | RECORD    | X,GAP                  | GRANTED     | 45        |
+|                  1935 | PRIMARY    | RECORD    | X,GAP                  | GRANTED     | 50        |
+|                  1935 | PRIMARY    | RECORD    | X,GAP,INSERT_INTENTION | GRANTED     | 50        |
++-----------------------+------------+-----------+------------------------+-------------+-----------+
+</code></pre></div></div>
+
+<p>After T4, deadlock information are as below:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>------------------------
+LATEST DETECTED DEADLOCK
+------------------------
+2024-03-09 10:11:14 281472264068992
+*** (1) TRANSACTION:
+TRANSACTION 1935, ACTIVE 16 sec inserting
+mysql tables in use 1, locked 1
+LOCK WAIT 4 lock struct(s), heap size 1128, 2 row lock(s)
+MySQL thread id 20, OS thread handle 281472569147264, query id 2771 192.168.214.1 root update
+/* ApplicationName=GoLand 2023.1.1 */ INSERT INTO `t`(id, `a`, `b`) VALUES (45,45,2) ON DUPLICATE KEY UPDATE `b` = -1
+
+*** (1) HOLDS THE LOCK(S):
+RECORD LOCKS space id 2 page no 4 n bits 80 index PRIMARY of table `deadlock_playground`.`t` trx id 1935 lock_mode X locks gap before rec
+Record lock, heap no 7 PHYSICAL RECORD: n_fields 5; compact format; info bits 0
+ 0: len 4; hex 80000032; asc    2;;
+ 1: len 6; hex 00000000076f; asc      o;;
+ 2: len 7; hex 810000009a012a; asc       *;;
+ 3: len 4; hex 80000032; asc    2;;
+ 4: len 4; hex 80000032; asc    2;;
+
+
+*** (1) WAITING FOR THIS LOCK TO BE GRANTED:
+RECORD LOCKS space id 2 page no 4 n bits 80 index PRIMARY of table `deadlock_playground`.`t` trx id 1935 lock_mode X locks gap before rec insert intention waiting
+Record lock, heap no 7 PHYSICAL RECORD: n_fields 5; compact format; info bits 0
+ 0: len 4; hex 80000032; asc    2;;
+ 1: len 6; hex 00000000076f; asc      o;;
+ 2: len 7; hex 810000009a012a; asc       *;;
+ 3: len 4; hex 80000032; asc    2;;
+ 4: len 4; hex 80000032; asc    2;;
+
+
+*** (2) TRANSACTION:
+TRANSACTION 1936, ACTIVE 4 sec inserting
+mysql tables in use 1, locked 1
+LOCK WAIT 4 lock struct(s), heap size 1128, 2 row lock(s)
+MySQL thread id 22, OS thread handle 281472568090496, query id 2802 192.168.214.1 root update
+/* ApplicationName=GoLand 2023.1.1 */ INSERT INTO `t`(id, `a`, `b`) VALUES (45,45,3) ON DUPLICATE KEY UPDATE `b` = -1
+
+*** (2) HOLDS THE LOCK(S):
+RECORD LOCKS space id 2 page no 4 n bits 80 index PRIMARY of table `deadlock_playground`.`t` trx id 1936 lock_mode X locks gap before rec
+Record lock, heap no 7 PHYSICAL RECORD: n_fields 5; compact format; info bits 0
+ 0: len 4; hex 80000032; asc    2;;
+ 1: len 6; hex 00000000076f; asc      o;;
+ 2: len 7; hex 810000009a012a; asc       *;;
+ 3: len 4; hex 80000032; asc    2;;
+ 4: len 4; hex 80000032; asc    2;;
+
+
+*** (2) WAITING FOR THIS LOCK TO BE GRANTED:
+RECORD LOCKS space id 2 page no 4 n bits 80 index PRIMARY of table `deadlock_playground`.`t` trx id 1936 lock_mode X locks gap before rec insert intention waiting
+Record lock, heap no 7 PHYSICAL RECORD: n_fields 5; compact format; info bits 0
+ 0: len 4; hex 80000032; asc    2;;
+ 1: len 6; hex 00000000076f; asc      o;;
+ 2: len 7; hex 810000009a012a; asc       *;;
+ 3: len 4; hex 80000032; asc    2;;
+ 4: len 4; hex 80000032; asc    2;;
+
+*** WE ROLL BACK TRANSACTION (2)
+</code></pre></div></div>
+
+<p>One may wonder, “Why does deadlock happen even for the highest isolation level, i.e., <code class="language-plaintext highlighter-rouge">SERIALIZABLE</code>?”.</p>
+
+<p>Let’s refer to the MySQL <a href="https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html#:~:text=READ%20COMMITTED.-,SERIALIZABLE,-This%20level%20is">documentation</a>:</p>
+<blockquote>
+  <p>SERIALIZABLE: This level is like REPEATABLE READ, but InnoDB implicitly converts all plain SELECT statements to SELECT … FOR SHARE if autocommit is disabled. If autocommit is enabled, the SELECT is its own transaction. It therefore is known to be read-only and can be serialized if performed as a consistent (nonlocking) read and need not block for other transactions.</p>
+</blockquote>
+
+<p>We can see that the <code class="language-plaintext highlighter-rouge">SERIALIZABLE</code> isolation level has nothing to do with the <code class="language-plaintext highlighter-rouge">INSERT</code> statement. Therefore, deadlock could definitely happen in the <code class="language-plaintext highlighter-rouge">SERIALIZABLE</code> isolation level.</p>
+
+<h2 id="references">References</h2>
+
+<ul>
+  <li>https://cloud.tencent.com/developer/article/2326843</li>
+</ul>
+
+
+<script src="https://unpkg.com/medium-zoom@1.1.0/dist/medium-zoom.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        mediumZoom('img'); // Zooms all images
+    });
+</script>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">Melatoni</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">nghiant3223@gmail.com</li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>Writings about programming</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

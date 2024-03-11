@@ -1,0 +1,258 @@
+flowchart
+    subgraph wirep
+        direction TB
+        wirep__mp_association["Associate M with P"] --> wirep__p_transition["\* → _Prunning"]
+    end
+
+    subgraph wakep
+        direction TB
+        wakep__get_idle_p["P := pidleget()"] --> wakep__check_p{"P is null?"}
+        wakep__check_p --> |Yes|wakep__releasem["releasem()"]
+        wakep__check_p --> |No|wakep__startm["startm()"]
+        wakep__startm --> wakep__releasem
+    end
+
+    subgraph sysmon
+        direction TB
+        sysmon__sleep["usleep()"] --> sysmon__retake["retake"]
+        sysmon__retake --> |Enter retake|sysmon__retake__iterate_over_allp["For P in allp"]
+        sysmon__retake__iterate_over_allp --> sysmon__retake__check_p_status_running_or_syscall{"P is _Prunning or _Psyscall?"}
+        sysmon__retake__check_p_status_running_or_syscall --> |Yes|sysmon__retake__preemptone["preemptone(P)"]
+        sysmon__retake__preemptone --> |Enter preemptone|sysmon__retake__preemptone__check_pm{"Does P have M?"}
+        sysmon__retake__preemptone__check_pm --> |Yes|sysmon__retake__preemptone__preemptm["preemptM()"]
+        sysmon__retake__preemptone__check_pm --> |No<br/>Exit preemptone|sysmon__retake__check_p_status_syscall
+        sysmon__retake__preemptone__preemptm --> |Exit preemptone|sysmon__retake__check_p_status_syscall{"P is _Psyscall?"}
+        sysmon__retake__check_p_status_running_or_syscall --> |No|sysmon__retake__check_p_status_syscall
+        sysmon__retake__check_p_status_syscall --> |Yes|sysmon__retake__p_transition["\* → _Pidle"]
+        sysmon__retake__check_p_status_syscall --> |No<br/>Exit retake|sysmon__sleep
+        sysmon__retake__p_transition --> sysmon__retake__handoffp["handoffp(P)"]
+        sysmon__retake__handoffp --> |Exit retake|sysmon__sleep
+    end
+
+    subgraph stopm
+        direction TB
+        stopm_mput["mput:<br/> Put M into idle list"] --> stopm_mpark["mpark:<br/>Sleep kernel thread<br/>Return when M wakes up"]
+    end
+
+    subgraph "startm(P)"
+        direction TB
+        startm__check_p_1["P is null"] --> |Yes|startm__pidleget["P = pidleget"]
+        startm__check_p_1 --> |No|startm__mget["M := mget():<br/>Get M from idle list"]
+        startm__pidleget --> startm__check_p_2{"P is null?"}
+        startm__check_p_2 --> |Yes|startm__releasem["releasem()"]
+        startm__check_p_2 --> |No|startm__mget
+        startm__mget --> startm__check_m["M is null?"]
+        startm__check_m --> |Yes|startm__newm["newm()"]
+        startm__newm --> startm__releasem
+        startm__check_m --> |No|startm__wakem["Wake up M"]
+        startm__wakem --> startm__releasem
+    end
+
+    subgraph schedule
+        direction TB
+        schedule__findrunnable["G, tryWakeP := findrunnable()"] --> schedule__check_try_wake_p{"tryWakeP?"}
+        schedule__check_try_wake_p --> |True|schedule__wakep["wakep()"]
+        schedule__check_try_wake_p --> |No|schedule__execute
+        schedule__wakep --> schedule__execute["execute(G)"]
+    end
+
+    subgraph runtime_pollWait
+        direction TB
+        runtime_pollwait__gopark["gopark()"]
+    end
+
+    subgraph releasem
+        direction TB
+        releasem__set_g_stackguard["G.stackguard = stackPreempt"]
+    end
+
+    subgraph *poll.FD.Read
+        direction TB
+        poll_fd_read__syscall_read["syscall.Read()"] --> poll_fd_read__syscall_sycall{"err := syscall.Syscall();<br/> err is null?"}
+        poll_fd_read__syscall_sycall --> |Yes|poll_fd_read__return_success["Return #byte read"]
+        poll_fd_read__syscall_sycall --> |No|poll_fd_read__check_error{"err is EGAIN?"}
+        poll_fd_read__check_error --> |Yes|poll_fd_read__runtime_pollwait["runtime_pollWait()"]
+        poll_fd_read__check_error --> |No|poll_fd_read__return_error["Return error"]
+        poll_fd_read__runtime_pollwait --> poll_fd_read__syscall_read
+    end
+
+    subgraph parkm
+        direction TB
+        parkm__g_transition["_Grunning → _Gwaiting"] --> parkm__waitunlockf["waitunlockf is non-null AND<br/>waitunlockf() returns false"]
+        parkm__waitunlockf --> |Yes|parkm__g_transition_waitunlockf_g_transition["_Gwaiting → _Grunnable"]
+        parkm__g_transition_waitunlockf_g_transition --> parkm__execute["execute()"]
+        parkm__waitunlockf --> |No|parkm__schedule["schedule()"]
+        parkm__execute --> parkm__schedule
+    end
+
+    subgraph newproc
+        direction TB
+        newproc__newproc1["G := newproc1()"] --> newproc__runqput["runqput(P, G)"]
+        newproc__runqput --> newproc__wakep["wakep()"]
+    end
+
+    subgraph newm
+        direction TB
+        newm__allocm["allocm()"] --> |Enter newm1,newosproc|newm__newosproc["Execute clone syscall,<br/>which executes mstart"]
+    end
+
+    subgraph mstart
+        direction TB
+        mstart__mstart0["mstart0"] --> mstart__mstart1["mstart1"]
+        mstart__mstart1 --> |Enter mstart1|mstart__mstart1__asminit["asminit()"]
+        mstart__mstart1__asminit --> mstart__mstart1__minit["minit()"]
+        mstart__mstart1__minit --> mstart__mstart1__check_m0{"M is M0?"}
+        mstart__mstart1__check_m0 --> |Yes|mstart__mstart1__mstartm0["mstartm0()"]
+        mstart__mstart1__mstartm0 --> mstart__mstart1__mstart__mstart1__mstartm0["schedule()"]
+        mstart__mstart1__check_m0 --> |No|mstart__mstart1__mstart__mstart1__mstartm0
+        mstart__mstart1__mstart__mstart1__mstartm0 --> |Exit mstart1|mstart__mexit["mexit()"]
+    end
+
+    subgraph handoffp
+        direction TB
+        handoffp__startm["startm(P)"]
+    end
+
+    subgraph gopark
+        direction TB
+        gopark__releasem["releasem()"] --> gopark__parkm["parkm()"]
+    end
+
+    subgraph goexit
+        direction TB
+        goexit__goexit1["goexit1()"] --> goexit__gdestroy["gdestroy()"]
+        goexit__gdestroy -->|Enter gdestroy|goexit__gdestroy__g_transition["_Grunning → _Gdead"]
+        goexit__gdestroy__g_transition --> goexit__gdestroy__dropg["dropg()"]
+        goexit__gdestroy__dropg --> goexit__gdestroy__gfput["gfput:<br/>Put G into free list"]
+        goexit__gdestroy__gfput --> |Exit gdestroy|goexit__schedule["schedule()"]
+    end
+
+    subgraph findrunnable
+        direction TB
+        findrunnable__tracereader{"G := traceReader();<br/>G is non-null?"} --> |Yes|findrunnable__try_wake_p_1["tryWakeP := true"]
+        findrunnable__try_wake_p_1 --> findrunnable__g_transition["_Gwaiting → _Grunnable"]
+        findrunnable__g_transition --> findrunnable__return_g["Return G, tryWakeP"]
+        findrunnable__tracereader --> |No|findrunnable__findrunnablegcworker{"G := findRunnableGCWorker();<br/>G is non null?"}
+        findrunnable__findrunnablegcworker --> |Yes|findrunnable__try_wake_p_2["tryWakeP := true"]
+        findrunnable__try_wake_p_2 --> findrunnable__return_g
+        findrunnable__findrunnablegcworker --> |No|findrunnable__global_run_queue_fairness["schedtick%61 == 0 AND<br/> global runqueue isn't empty"]
+        findrunnable__global_run_queue_fairness --> |Yes|findrunnable__fairness__globalrunqget["G := globrunqget();<br/>G is non-null"]
+        findrunnable__global_run_queue_fairness --> |No|findrunnable__wake_up_finalizer["wakefing():<br/>Wake up finalizer"]
+        findrunnable__fairness__globalrunqget --> |Yes|findrunnable__try_wake_p_3["tryWakeP := false"]
+        findrunnable__try_wake_p_3 --> findrunnable__return_g
+        findrunnable__fairness__globalrunqget --> |No|findrunnable__wake_up_finalizer
+        findrunnable__wake_up_finalizer --> findrunnable__runqget{"G := runqget();<br/>G is non-null?"}
+        findrunnable__runqget --> |Yes|findrunnable__try_wake_p_3
+        findrunnable__runqget --> |No|findrunnable_globrunqget{"G := globrunqget();<br/>G is non-null?"}
+        findrunnable_globrunqget --> |Yes|findrunnable__try_wake_p_3
+        findrunnable_globrunqget --> |No|findrunnable__netpoll{"G := netpoll();<br/>G is non-null?"}
+        findrunnable__netpoll --> |Yes|findrunnable__try_wake_p_4["tryWakeP := false"]
+        findrunnable__try_wake_p_4 --> |Yes|findrunnable__g_transition
+        findrunnable__netpoll --> |No|findrunnable__steakwork{"G := stealwork();<br/>G is non-null?"}
+        findrunnable__steakwork --> |Yes|findrunnable__try_wake_p_3
+        findrunnable__steakwork --> |No|findrunnable__gcbgmarkworkerpool{"G := gcBgMarkWorkerPool.pop();<br/>G is non-null?"}
+        findrunnable__gcbgmarkworkerpool --> |Yes|findrunnable__try_wake_p_4
+        findrunnable__gcbgmarkworkerpool --> |No|findrunnable__stopm["stopm"]
+        findrunnable__stopm --> findrunnable__tracereader
+    end
+
+    subgraph execute
+        direction TB
+        execute__gm_association["Associate G with M"] --> execute__g_transition["_Grunnable → _Grunning"]
+        execute__g_transition --> execute_allocate_stack["G.preempt = false<br/>G.stackguard0 = G.stack.lo + stackGuard"]
+        execute_allocate_stack --> execute__gogo["gogo():<br/>Execute goroutine code"]
+        execute__gogo --> execute__goexit["goexit()"]
+    end
+
+subgraph exitsyscall0
+direction TB
+exitsyscall0__g_transition[_Gsyscall → _Grunnable] --> exitsyscall0__dropg["dropg"]
+exitsyscall0__dropg --> exitsyscall0__pidleget["P := pidleget()"]
+exitsyscall0__pidleget --> exitsyscall0__check_p_idle{"Is there any idle P?"}
+exitsyscall0__check_p_idle  --> |No|exitsyscall0__globalrunqueueput["Put G into global run queue"]
+exitsyscall0__check_p_idle  --> |Yes|exitsyscall0__acquirep["acquirep()"]
+exitsyscall0__acquirep --> exitsyscall0__execute["execute()"]
+exitsyscall0__execute --> exitsyscall0_stopm["stopm()"]
+exitsyscall0__globalrunqueueput --> exitsyscall0_stopm
+exitsyscall0_stopm --> exitsyscall0__schedule["schedule()"]
+end
+
+subgraph exitsyscallfast_pidle
+direction TB
+exitsyscallfast_pidle__pidleget["P := pidleget()"]  --> exitsyscallfast_pidle__check_p_idle{"Is there any idle P?"}
+exitsyscallfast_pidle__check_p_idle --> |Yes|exitsyscallfast_pidle__acquirep["acquirep()"]
+exitsyscallfast_pidle__acquirep --> exitsyscallfast_pidle__return_true["Return true"]
+exitsyscallfast_pidle__check_p_idle --> |No|exitsyscallfast_pidle_return_false["Return false"]
+end
+
+subgraph exitsyscallfast
+direction TB
+exitsyscall_fast_check_p_status{"M.oldp is _Psyscall?"} --> |Yes|exitsyscallfast__wirep["wirep(M.oldp)"]
+exitsyscallfast__wirep --> exitsyscallfast__return_true["Return true"]
+exitsyscall_fast_check_p_status --> |No|exitsyscallfast__exitsyscallfast_pidle["Return exitsyscallfast_pidle()"]
+end
+
+subgraph exitsyscall
+direction TB
+exitsyscall_exitsyscallfast["exitsyscallfast()"] --> |True|exitsyscall_g_transition[_Gsyscall → _Grunning]
+exitsyscall_exitsyscallfast --> |False|exitsyscall_exitsyscall0["exitsyscall0()"]
+end
+
+subgraph reenetersyscall
+direction TB
+reenetersyscall__save_pointers["Save PC, SP, FP"] --> reenetersyscall__g_transition[_Grunning → _Gsyscall]
+reenetersyscall__g_transition --> reenetersyscall__mp_disassocciation["Disassociate M from P,<br/> Set M.oldp = P"]
+reenetersyscall__mp_disassocciation --> reenetersyscall__p_transtion["\* → _Psyscall"]
+end
+
+subgraph syscall.Syscall
+direction TB
+entersyscall --> reenetersyscall
+reenetersyscall --> execute_syscall["Execute syscall"]
+execute_syscall --> exitsyscall
+end
+
+subgraph dropg
+direction TB
+dropg__gm_disassociation["Disassociate G from M"]
+end
+
+subgraph asyncPreempt2
+direction TB
+asyncPreempt__asyncPreempt["G.preemptStop?<br/>Set to true in suspendG()<br/>by tracer or GC marker"] --> |Yes|asyncPreempt2__preemptPark["preemptPark()"]
+asyncPreempt__asyncPreempt --> |No|asyncPreempt2__gopreempt_m["gopreempt_m()"]
+asyncPreempt2__gopreempt_m --> |Enter goschedImpl|asyncPreempt2__goschedImpl__g_transition["_Grunning → _Grunnable"]
+asyncPreempt2__goschedImpl__g_transition --> asyncPreempt2__goschedImpl__dropg["dropg()"]
+asyncPreempt2__goschedImpl__dropg --> asyncPreempt2__goschedImpl__globrunqput["globrunqput(G)"]
+asyncPreempt2__goschedImpl__globrunqput --> asyncPreempt2__goschedImpl__wakep["wakep()"]
+asyncPreempt2__goschedImpl__wakep --> asyncPreempt2__goschedImpl__schedule["schedule()"]
+asyncPreempt2__preemptPark --> |Enter preemptPark|asyncPreempt2__preemptPark__g_transition_1["_Grunning → _Gscan | _Gpreempted"]
+asyncPreempt2__preemptPark__g_transition_1 --> asyncPreempt2__preemptPark__dropg["dropg()"]
+asyncPreempt2__preemptPark__dropg --> asyncPreempt2__preemptPark__g_transition_2["_Gscan | _Gpreempted → _Gpreempted"]
+asyncPreempt2__preemptPark__g_transition_2 --> asyncPreempt2__preemptPark__schedule["schedule()"]
+end
+
+subgraph allocm
+direction TB
+allocm__init_m["Create M and<br/>allocate g0"]
+end
+
+subgraph acquirep
+direction TB
+acquirep__wirep["wirep()"] --> acquirep__prepare_sweep["Prepare sweep"]
+end
+
+subgraph program bootstrap
+direction TB
+bootstrap__rt0_linux_amd64_s["rt0_linux_amd64.s"] --> bootstrap__runtime_rt0_amd64["runtime·_rt0_amd64"]
+bootstrap__runtime_rt0_amd64 --> bootstrap__runtime_rt0_go["runtime·rt0_go"]
+bootstrap__runtime_rt0_go --> bootstrap__runtime_settls["runtime·settls"]
+bootstrap__runtime_settls --> |Enter <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/asm_amd64.s#L268-L268">ok</a> block|bootstrap__runtime_check["runtime·check"]
+bootstrap__runtime_check --> bootstrap__runtime_args["runtime·args"]
+bootstrap__runtime_args --> bootstrap__runtime_osinit["runtime·osinit"]
+bootstrap__runtime_osinit --> bootstrap__runtime_schedinit["runtime·schedinit"]
+bootstrap__runtime_schedinit --> |Enter procresize|bootstrap__runtime_schedinit__procresize__acquire_first_p["P := allp[0]"]
+bootstrap__runtime_schedinit__procresize__acquire_first_p --> bootstrap__runtime_schedinit__procresize__wirep["acquirep(P)"]
+bootstrap__runtime_schedinit__procresize__wirep --> |Exit procresize|bootstrap__runtime_newproc["runtime·newproc,<br/>with runtime.main<br/>as it 1st argument"]
+bootstrap__runtime_newproc --> bootstrap__runtime_mstart["runtime·mstart"]
+end

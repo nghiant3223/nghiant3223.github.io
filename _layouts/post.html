@@ -1,0 +1,63 @@
+---
+layout: default
+---
+
+<link rel="stylesheet" href="{{ '/assets/fonts/style.css' | relative_url }}">
+
+<style>
+    body {
+        font-family: 'Minion 3', serif;
+    }
+
+    th {
+        padding: unset !important;
+    }
+
+    table {
+        margin-bottom: 15px;
+    }
+
+    code {
+        font-family: 'Source Code Pro', monospace;
+    }
+
+    blockquote {
+        font-style: normal;
+        letter-spacing: normal;
+    }
+
+    path {
+        stroke-width: 1px !important;
+    }
+</style>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[href^='http']").forEach(function (link) {
+            link.setAttribute("target", "_blank");
+            link.setAttribute("rel", "noopener noreferrer");
+        });
+    });
+</script>
+
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'base',
+        themeVariables: {
+            fontSize: '32px',
+            fontFamily: 'Source Code Pro',
+        }
+    });
+</script>
+
+{{ content }}
+
+<script src="https://unpkg.com/medium-zoom@1.1.0/dist/medium-zoom.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        mediumZoom('img'); // Zooms all images
+    });
+</script>
