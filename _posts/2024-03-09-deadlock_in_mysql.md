@@ -40,7 +40,7 @@ INSERT INTO `t` (a, b) VALUES (10, 10), (20, 20), (30, 30), (40, 40), (50, 50);
 
 Different sessions attempting to `INSERT` records with the same primary key at the same time can cause deadlock at every isolation level. This also applies to the `INSERT ... ON DUPLICATE KEY ...` statement.
 
-Below is an example results in deadlock, in which isolation level `SERIALIZABLE` is used.
+Below is an example results in deadlock, in which isolation level SERIALIZABLE is used.
 
 | Timestamp | Session 1                                                                               | Session 2                                                                               | Session 3                                                                               |
 |-----------|-----------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|
