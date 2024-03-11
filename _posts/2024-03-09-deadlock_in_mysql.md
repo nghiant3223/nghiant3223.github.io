@@ -20,6 +20,10 @@ Please note that the demonstration below is conducted using MySQL 8.0.32.
 ## Preparation
 
 ```sql
+CREATE SCHEMA IF NOT EXISTS `deadlock_playground`;
+
+USE `deadlock_playground`;
+
 CREATE TABLE `t`
 (
     `id` INT NOT NULL AUTO_INCREMENT,
