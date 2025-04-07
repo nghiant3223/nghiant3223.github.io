@@ -99,16 +99,16 @@ func main() {
 ```
 
 After the program finishes running, we use the command `go tool trace trace.out` to visualize the trace.
-I prepared the `trace.out` file [here](2025-03-11-go-scheduler/non_cooperative_preempt_trace.out) just in case you want to play with it.
+I prepared the `trace.out` file [here](/assets/2025-03-11-go-scheduler/non_cooperative_preempt_trace.out) just in case you want to play with it.
 In the visualization, the horizontal axis represents which goroutine is running on the P at a given time.
 As expected, there is only one logical processor P named "Proc 0", resulted from `runtime.GOMAXPROCS(1)`.
 
-![runtime_trace_start.png](2025-03-11-go-scheduler/runtime_trace_start.png)
+![runtime_trace_start.png](/assets/2025-03-11-go-scheduler/runtime_trace_start.png)
 
 By zooming in (pressing 'W') to the start of the timeline, you can see that the process begins with `main.main` (the main function in the main package), which runs on the primary goroutine, G1.
 After a few microseconds, still on Proc 0, goroutine G10 is scheduled to execute the `fibonacci` function. It then takes over the processor, preempting G1.
 
-![runtime_trace_preempt.png](2025-03-11-go-scheduler/runtime_trace_preempt.png)
+![runtime_trace_preempt.png](/assets/2025-03-11-go-scheduler/runtime_trace_preempt.png)
 
 By zooming out (pressing 'S') and scrolling slightly to the right, you can observe that G10 is later replaced by another goroutine, G9, which is the next instance running the `fibonacci` function.
 This goroutine is also created and executed on Proc 0. Please pay attention to the `runtime.asyncPreempt:47` in the visualization, I will explain this in a moment.
@@ -153,7 +153,7 @@ Since the Go compiler applies various optimizations that can make debugging more
 This can be done using the following command: `go build -gcflags="all=-N -l" -o fibonacci main.go`.
 For easier debugging, I use [Delve](https://github.com/go-delve/delve), a powerful debugger for Go, to disassemble the `fibonacci` function: `dlv exec ./fibonacci`.
 Once inside the debugger, I run the following command to view the assembly code of the fibonacci function: `disassemble -l main.fibonacci`.
-You can find the assembly code of the original program [here](2025-03-11-go-scheduler/non_cooperative_preempt.s).
+You can find the assembly code of the original program [here](/assets/2025-03-11-go-scheduler/non_cooperative_preempt.s).
 As I'm building the program on my local machine, which is darwin/arm64, the assembly code could be different from the one you might see on your machine. 
 
 That's all set, let's take a look at the assembly code of the `fibonacci` function and see what the code does.
@@ -202,7 +202,7 @@ For reference, see the relevant code: [sysmon preemption](https://github.com/gol
 
 Alright, let's run the program again—just make sure `GOMAXPROCS=1` is set—and then check out the trace.
 
-![](2025-03-11-go-scheduler/runtime_trace_cooperative_preempt.png)
+![](/assets/2025-03-11-go-scheduler/runtime_trace_cooperative_preempt.png)
 
 You can clearly see that the goroutines relinquish the logical processor after only tens of microseconds—unlike in non-cooperative preemption, where they might hold it for more than 10 milliseconds.
 Notably, goroutine G9's stack trace ends at the `fmt.Printf` call, which occurs inside the loop body.
@@ -239,14 +239,16 @@ func main() {
 Functions like `http.ListenAndServe()` and `http.HandleFunc()` might seem deceptively simple—but under the hood, they abstract away a lot of low-level networking complexity.
 Go builds on top of fundamental [socket](https://en.wikipedia.org/wiki/Unix_domain_socket) operations (depicted in the figure below) to manage network communication between clients and servers.
 
-| ![socket_system_calls_in_http_server.png](2025-03-11-go-scheduler/socket_system_calls_in_http_server.png) | 
-|:---------------------------------------------------------------------------------------------------------:| 
-|                             Overview of system calls used with stream sockets                             |
+| ![socket_system_calls_in_http_server.png](/assets/2025-03-11-go-scheduler/socket_system_calls_in_http_server.png) | 
+|:-----------------------------------------------------------------------------------------------------------------:| 
+|                                 Overview of system calls used with stream sockets                                 |
 
 Specifically, `http.ListenAndServe()` uses [`socket()`](https://man7.org/linux/man-pages/man2/socket.2.html), [`bind()`](https://man7.org/linux/man-pages/man2/bind.2.html), [`listen()`](https://man7.org/linux/man-pages/man2/listen.2.html), [`accept()`](https://man7.org/linux/man-pages/man2/accept.2.html) to initialize a TCP socket, binds it to the specified address and port, listens for incoming connections, and accepts them in a loop—all without you having to write a single line of socket-handling code.
 Similarly, `http.HandleFunc()` registers your handler functions to respond to HTTP requests, abstracting away the lower-level details like reading from and writing to the connection using system calls such as [`read()`](https://man7.org/linux/man-pages/man2/read.2.html) and [`write()`](https://man7.org/linux/man-pages/man2/write.2.html).
 
-![go_http_server_meme.jpg](2025-03-11-go-scheduler/go_http_server_meme.jpg)
+<div style="text-align: center;">
+  <img src="/assets/2025-03-11-go-scheduler/socket_system_calls_in_http_server.png" alt="socket_system_calls_in_http_server.png" width="600">
+</div>
 
 But it's not that simple for an HTTP server to handle hundreds of thousands of concurrent requests efficiently.
 Go employs several techniques to achieve this. Let's take a closer look at some I/O models in Linux and how Go takes advantage of them.
