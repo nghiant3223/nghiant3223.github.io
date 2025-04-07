@@ -200,12 +200,12 @@ For reference, see the relevant code: [sysmon preemption](https://github.com/gol
 
 #### Trace Visualization
 
-Alright, let's run the program again—just make sure `GOMAXPROCS=1` is set—and then check out the trace.
+Alright, let's run the program again—make sure `GOMAXPROCS=1` is set—and then check out the trace.
 
 ![](/assets/2025-03-11-go-scheduler/runtime_trace_cooperative_preempt.png)
 
-You can clearly see that the goroutines relinquish the logical processor after only tens of microseconds—unlike in non-cooperative preemption, where they might hold it for more than 10 milliseconds.
-Notably, goroutine G9's stack trace ends at the `fmt.Printf` call, which occurs inside the loop body.
+You can clearly see that goroutines relinquish the logical processor after just tens of microseconds—unlike with non-cooperative preemption, where they might retain it for over 10 milliseconds.
+Notably, G9’s stack trace ends at the `fmt.Printf` call inside the loop body, illustrating how cooperative preemption allows goroutines to voluntarily yield control.
 This illustrates cooperative preemption, where goroutines voluntarily yield the processor.
 
 ## Handling Syscall
@@ -215,12 +215,12 @@ This illustrates cooperative preemption, where goroutines voluntarily yield the 
 ## Network I/O and File I/O
 
 This [survey](https://go.dev/blog/survey2024h2/what.svg) shows that 75% of Go uses cases are web services.
-And it's not a coincidence, Go is designed to be fast and efficient for network operation.
-To understand the reason behind this, let's take a look at how Go handles I/O operations under the hood.
+And it's not a coincidence, Go is designed to be fast and efficient for network operation to solve the notorious problem—[C10K](https://en.wikipedia.org/wiki/C10k_problem).
+To understand how Go solves this problem, let's take a look at how Go handles I/O operations under the hood.
 
 ### HTTP Server Under the Hood
 
-Go makes it incredibly straightforward to start an HTTP server. For example:
+In Go, it's incredibly straightforward to start an HTTP server. For example:
 
 ```go
 package main
@@ -241,19 +241,29 @@ Go builds on top of fundamental [socket](https://en.wikipedia.org/wiki/Unix_doma
 
 | ![socket_system_calls_in_http_server.png](/assets/2025-03-11-go-scheduler/socket_system_calls_in_http_server.png) | 
 |:-----------------------------------------------------------------------------------------------------------------:| 
-|                                 Overview of system calls used with stream sockets                                 |
+|                    Figure 56-1: Overview of system calls used with stream sockets<sup>N</sup>                     |
 
-Specifically, `http.ListenAndServe()` uses [`socket()`](https://man7.org/linux/man-pages/man2/socket.2.html), [`bind()`](https://man7.org/linux/man-pages/man2/bind.2.html), [`listen()`](https://man7.org/linux/man-pages/man2/listen.2.html), [`accept()`](https://man7.org/linux/man-pages/man2/accept.2.html) to initialize a TCP socket, binds it to the specified address and port, listens for incoming connections, and accepts them in a loop—all without you having to write a single line of socket-handling code.
+Specifically, `http.ListenAndServe()` leverages the following system calls: [`socket()`](https://man7.org/linux/man-pages/man2/socket.2.html), [`bind()`](https://man7.org/linux/man-pages/man2/bind.2.html), [`listen()`](https://man7.org/linux/man-pages/man2/listen.2.html), [`accept()`](https://man7.org/linux/man-pages/man2/accept.2.html) to create a TCP sockets, which  to create a TCP sockets, which is essentially [file descriptors](https://en.wikipedia.org/wiki/File_descriptor).
+It binds the listening socket to the specified address and port, listens for incoming connections, and creates a new connected socket to handle client requests—all without requiring you to write any socket-handling code.
 Similarly, `http.HandleFunc()` registers your handler functions to respond to HTTP requests, abstracting away the lower-level details like reading from and writing to the connection using system calls such as [`read()`](https://man7.org/linux/man-pages/man2/read.2.html) and [`write()`](https://man7.org/linux/man-pages/man2/write.2.html).
 
 <div style="text-align: center;">
-  <img src="/assets/2025-03-11-go-scheduler/socket_system_calls_in_http_server.png" alt="socket_system_calls_in_http_server.png" width="600">
+  <img src="/assets/2025-03-11-go-scheduler/go_http_server_meme.jpg" alt="socket_system_calls_in_http_server.png" width="600">
 </div>
 
-But it's not that simple for an HTTP server to handle hundreds of thousands of concurrent requests efficiently.
+But it's not that simple for an HTTP server to handle tens of thousands of concurrent requests efficiently.
 Go employs several techniques to achieve this. Let's take a closer look at some I/O models in Linux and how Go takes advantage of them.
 
-### I/O Synchronicity and I/O Multiplexing
+### Blocking and Non-Blocking I/O
+
+An I/O operation can be either blocking or non-blocking.
+When a thread issues a blocking system call, its execution is suspended until the system call completes with the requested data.
+In contrast, non-blocking I/O doesn't suspend the thread; instead, it immediately returns the requested data if available, or an error (<a href="https://man7.org/linux/man-pages/man3/errno.3.html#:~:text=POSIX.1%2D2001\).-,EAGAIN,-Resource%20temporarily%20unavailable">EAGAIN</a> or <a href="https://man7.org/linux/man-pages/man3/errno.3.html#:~:text=POSIX.1%2D2001\).-,EAGAIN,-Resource%20temporarily%20unavailable">EWOULDBLOCK</a>) if the data is not yet ready.
+Blocking I/O is simpler but inefficient as the application has to create N kernel threads for N connections, while non-blocking I/O is more complex but allows better resource utilization.
+Refer to the figures below for a better understanding of the two models.
+| <img src="/assets/2025-03-11-go-scheduler/blocking_io.png" style="width: 400px"/> | <img src="/assets/2025-03-11-go-scheduler/non_blocking_io.png" style="width: 400px"/> | 
+|:---------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------:| 
+|                    Figure 6.1. Blocking I/O model.<sup>N</sup>                    |                    Figure 6.2. Non-blocking I/O model.<sup>N</sup>                    |
 
 // Talk about how FD is created in network and file system.
 
@@ -268,6 +278,8 @@ Go employs several techniques to achieve this. Let's take a closer look at some 
 // Mention: https://www.sobyte.net/post/2022-01/go-netpoller/
 
 // Mention epoll: https://www.sobyte.net/post/2021-10/golang-from-kernel-to-epoll
+
+// https://tuhuynh.com/posts/nio-under-the-hood/
 
 
 ## Garbage Collector
@@ -336,3 +348,7 @@ P's are created.
 - https://www.learnvulnerabilityresearch.com/stack-frame-function-prologue
 - https://dev.to/aceld/understanding-the-golang-goroutine-scheduler-gpm-model-4l1g
 -->
+
+## References
+
+- [N] Michael KerrisK. *The Linux Programming Interface*.
