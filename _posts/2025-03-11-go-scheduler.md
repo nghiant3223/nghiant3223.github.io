@@ -275,16 +275,16 @@ When `select` returns that the socket is readable, the application calls `recvfr
 
 | <img src="/assets/2025-03-11-go-scheduler/io_multiplexing.png" width=500/> |
 |:--------------------------------------------------------------------------:|
-|                    I/O multiplexing model.<sup>[N]</sup>                     |
+|                   I/O multiplexing model.<sup>[N]</sup>                    |
 
 ## I/O Model in Go
 
-Go uses a combination of non-blocking I/O and I/O multiplexing to handle network operations efficiently.
+Go uses a combination of non-blocking I/O and I/O multiplexing to handle I/O operations efficiently.
 However, because `select` and `poll` have performance limitations, as described [here](https://jvns.ca/blog/2017/06/03/async-io-on-linux--select--poll--and-epoll/#why-don-t-we-use-poll-and-select), Go avoids using them in favor of more efficient alternatives: [epoll](https://man7.org/linux/man-pages/man7/epoll.7.html) for Linux, [kqueue](https://man.freebsd.org/cgi/man.cgi?kqueue) for Darwin, and [IOCP](https://learn.microsoft.com/en-us/windows/win32/fileio/i-o-completion-ports) for Windows.
 
-Whenever a TCP listener [accepts](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/tcpsock.go#L374-L385) a new connection, it invokes the [`Init`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L41-L41) method of a [poll file descriptor](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L18-L18), which in turn invokes [`poll_runtime_pollOpen`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L243-L278) in Go runtime to execute [`epoll_ctl`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) system call with [`EPOLL_CTL_ADD`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html#:~:text=op%20argument%20are%3A-,EPOLL_CTL_ADD,-Add%20an%20entry), adding a new entry to the interesting list of `epoll`.
-Go also leverages `epoll` for file I/O. When the file is opened, the earlier `Init` method is also invoked [here](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/os/file_unix.go#L237-L237) to register the file descriptor with `epoll`.
-
+Whenever a TCP listener [accepts](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/tcpsock.go#L374-L385) a new connection, it invokes the [`Init`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L41-L41) method of a [poll file descriptor](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L18-L18).
+This, in turn, invokes [`poll_runtime_pollOpen`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L243-L278) within Go runtime to execute [`epoll_ctl`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) system call with [`EPOLL_CTL_ADD`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html#:~:text=op%20argument%20are%3A-,EPOLL_CTL_ADD,-Add%20an%20entry) operation, adding a new entry to the interesting list of `epoll`.
+Building on the success of this approach for network I/O, Go also utilizes `epoll` for file I/O operations. When a file is opened, the same [`Init`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/os/file_unix.go#L237-L237) method is invoked to register the file descriptor with `epoll`, enabling efficient I/O multiplexing for files as well.
 
 // Talk about I/O multiplexing.
 
