@@ -1,5 +1,8 @@
 # Go Scheduler
 
+## Disclaimer
+
+This blog post primarily focuses on [Go 1.24](https://tip.golang.org/doc/go1.24) programming for [Linux](https://en.wikipedia.org/wiki/Linux) on [ARM](https://en.wikipedia.org/wiki/ARM_architecture_family) architecture. It may not cover platform-specific details for other operating systems or architectures.
 ## Introduction
 
 // Mention why Go is fast:
@@ -241,7 +244,7 @@ Go builds on top of fundamental [socket](https://en.wikipedia.org/wiki/Unix_doma
 
 | <img src="/assets/2025-03-11-go-scheduler/socket_system_calls_in_http_server.png" width=300/> | 
 |:---------------------------------------------------------------------------------------------:| 
-|                 Overview of system calls used with stream sockets<sup>N</sup>                 |
+|                 Overview of system calls used with stream sockets<sup>[N]</sup>                 |
 
 Specifically, `http.ListenAndServe()` leverages the following system calls: [`socket()`](https://man7.org/linux/man-pages/man2/socket.2.html), [`bind()`](https://man7.org/linux/man-pages/man2/bind.2.html), [`listen()`](https://man7.org/linux/man-pages/man2/listen.2.html), [`accept()`](https://man7.org/linux/man-pages/man2/accept.2.html) to create a TCP sockets, which  to create a TCP sockets, which is essentially [file descriptors](https://en.wikipedia.org/wiki/File_descriptor).
 It binds the listening socket to the specified address and port, listens for incoming connections, and creates a new connected socket to handle client requests—all without requiring you to write any socket-handling code.
@@ -264,20 +267,24 @@ Refer to the figures below for a better understanding of the two models.
 
 | <img src="/assets/2025-03-11-go-scheduler/blocking_io.png" width=300/> | <img src="/assets/2025-03-11-go-scheduler/non_blocking_io.png" width=300/> | 
 |:----------------------------------------------------------------------:|:--------------------------------------------------------------------------:| 
-|                    Blocking I/O model.<sup>N</sup>                     |                    Non-blocking I/O model.<sup>N</sup>                     |
+|                    Blocking I/O model.<sup>[N]</sup>                     |                    Non-blocking I/O model.<sup>[N]</sup>                     |
 
 Another I/O model worth mentioning is I/O multiplexing, in which [`select`](https://man7.org/linux/man-pages/man2/select.2.html), or [`poll`](https://man7.org/linux/man-pages/man2/poll.2.html) system call is used to wait for one of a set of file descriptors to become ready to perform I/O.
 In this model, the application blocks on one of these system calls, rather than on the actual I/O system calls, such as `recvfrom` shown in the figures above.
 When `select` returns that the socket is readable, the application calls `recvfrom` to copy requested data to application buffer.
 
-| <img src="/assets/2025-03-11-go-scheduler/io_multiplexing.png" width=300/> |
+| <img src="/assets/2025-03-11-go-scheduler/io_multiplexing.png" width=500/> |
 |:--------------------------------------------------------------------------:|
-|                    I/O multiplexing model.<sup>N</sup>                     |
+|                    I/O multiplexing model.<sup>[N]</sup>                     |
 
 ## I/O Model in Go
 
 Go uses a combination of non-blocking I/O and I/O multiplexing to handle network operations efficiently.
 However, because `select` and `poll` have performance limitations, as described [here](https://jvns.ca/blog/2017/06/03/async-io-on-linux--select--poll--and-epoll/#why-don-t-we-use-poll-and-select), Go avoids using them in favor of more efficient alternatives: [epoll](https://man7.org/linux/man-pages/man7/epoll.7.html) for Linux, [kqueue](https://man.freebsd.org/cgi/man.cgi?kqueue) for Darwin, and [IOCP](https://learn.microsoft.com/en-us/windows/win32/fileio/i-o-completion-ports) for Windows.
+
+Whenever a TCP listener [accepts](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/tcpsock.go#L374-L385) a new connection, it invokes the [`Init`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L41-L41) method of a [poll file descriptor](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L18-L18), which in turn invokes [`poll_runtime_pollOpen`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L243-L278) in Go runtime to execute [`epoll_ctl`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) system call with [`EPOLL_CTL_ADD`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html#:~:text=op%20argument%20are%3A-,EPOLL_CTL_ADD,-Add%20an%20entry), adding a new entry to the interesting list of `epoll`.
+Go also leverages `epoll` for file I/O. When the file is opened, the earlier `Init` method is also invoked [here](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/os/file_unix.go#L237-L237) to register the file descriptor with `epoll`.
+
 
 // Talk about I/O multiplexing.
 
@@ -360,6 +367,9 @@ P's are created.
 - https://www.altoros.com/blog/golang-internals-part-6-bootstrapping-and-memory-allocator-initialization/
 - https://www.learnvulnerabilityresearch.com/stack-frame-function-prologue
 - https://dev.to/aceld/understanding-the-golang-goroutine-scheduler-gpm-model-4l1g
+- https://notes.shichao.io/unp/ch6/#nonblocking-io-model
+- https://draven.co/golang/docs/part3-runtime/ch06-concurrency/golang-netpoller/
+- PR that adds file I/O to netpoll: https://github.com/golang/go/commit/c05b06a12d005f50e4776095a60d6bd9c2c91fac
 -->
 
 ## References
