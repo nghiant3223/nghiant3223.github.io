@@ -241,7 +241,7 @@ Go builds on top of fundamental [socket](https://en.wikipedia.org/wiki/Unix_doma
 
 | <img src="/assets/2025-03-11-go-scheduler/socket_system_calls_in_http_server.png" width=300/> | 
 |:---------------------------------------------------------------------------------------------:| 
-|          Figure 56-1: Overview of system calls used with stream sockets<sup>N</sup>           |
+|                 Overview of system calls used with stream sockets<sup>N</sup>                 |
 
 Specifically, `http.ListenAndServe()` leverages the following system calls: [`socket()`](https://man7.org/linux/man-pages/man2/socket.2.html), [`bind()`](https://man7.org/linux/man-pages/man2/bind.2.html), [`listen()`](https://man7.org/linux/man-pages/man2/listen.2.html), [`accept()`](https://man7.org/linux/man-pages/man2/accept.2.html) to create a TCP sockets, which  to create a TCP sockets, which is essentially [file descriptors](https://en.wikipedia.org/wiki/File_descriptor).
 It binds the listening socket to the specified address and port, listens for incoming connections, and creates a new connected socket to handle client requests—all without requiring you to write any socket-handling code.
@@ -262,13 +262,25 @@ In contrast, non-blocking I/O doesn't suspend the thread; instead, it immediatel
 Blocking I/O is simpler but inefficient as the application has to create N kernel threads for N connections, while non-blocking I/O is more complex but allows better resource utilization.
 Refer to the figures below for a better understanding of the two models.
 
-| <img src="/assets/2025-03-11-go-scheduler/blocking_io.png" width=400/> | <img src="/assets/2025-03-11-go-scheduler/non_blocking_io.png" width=400/> | 
-|:----------------------------------------------------------------------:|:---------------------------------------------------------------------------:| 
-|              Figure 6.1. Blocking I/O model.<sup>N</sup>               |               Figure 6.2. Non-blocking I/O model.<sup>N</sup>               |
+| <img src="/assets/2025-03-11-go-scheduler/blocking_io.png" width=300/> | <img src="/assets/2025-03-11-go-scheduler/non_blocking_io.png" width=300/> | 
+|:----------------------------------------------------------------------:|:--------------------------------------------------------------------------:| 
+|                    Blocking I/O model.<sup>N</sup>                     |                    Non-blocking I/O model.<sup>N</sup>                     |
 
-// Talk about how FD is created in network and file system.
+Another I/O model worth mentioning is I/O multiplexing, in which [`select`](https://man7.org/linux/man-pages/man2/select.2.html), or [`poll`](https://man7.org/linux/man-pages/man2/poll.2.html) system call is used to wait for one of a set of file descriptors to become ready to perform I/O.
+In this model, the application blocks on one of these system calls, rather than on the actual I/O system calls, such as `recvfrom` shown in the figures above.
+When `select` returns that the socket is readable, the application calls `recvfrom` to copy requested data to application buffer.
+
+| <img src="/assets/2025-03-11-go-scheduler/io_multiplexing.png" width=300/> |
+|:--------------------------------------------------------------------------:|
+|                    I/O multiplexing model.<sup>N</sup>                     |
+
+## I/O Model in Go
+
+Go uses a combination of non-blocking I/O and I/O multiplexing to handle network operations efficiently.
+However, because `select` and `poll` have performance limitations, as described [here](https://jvns.ca/blog/2017/06/03/async-io-on-linux--select--poll--and-epoll/#why-don-t-we-use-poll-and-select), Go avoids using them in favor of more efficient alternatives: [epoll](https://man7.org/linux/man-pages/man7/epoll.7.html) for Linux, [kqueue](https://man.freebsd.org/cgi/man.cgi?kqueue) for Darwin, and [IOCP](https://learn.microsoft.com/en-us/windows/win32/fileio/i-o-completion-ports) for Windows.
 
 // Talk about I/O multiplexing.
+
 // Talk about sync and async I/O. Mention how [fcntl](https://man7.org/linux/man-pages/man2/fcntl.2.html) is used to set the file descriptor to non-blocking mode.
 
 // Talk about how epoll works with asynchronous FD.
@@ -352,4 +364,5 @@ P's are created.
 
 ## References
 
-- [N] Michael KerrisK. *The Linux Programming Interface*.
+- [N] Michael Kerrisk. *The Linux Programming Interface*.
+- [N], [N], [N] W. Richard Stevens, Bill Fenner, Andrew M. Rudoff. *Unix Network Programming*.
