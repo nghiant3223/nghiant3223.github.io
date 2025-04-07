@@ -239,31 +239,32 @@ func main() {
 Functions like `http.ListenAndServe()` and `http.HandleFunc()` might seem deceptively simple—but under the hood, they abstract away a lot of low-level networking complexity.
 Go builds on top of fundamental [socket](https://en.wikipedia.org/wiki/Unix_domain_socket) operations (depicted in the figure below) to manage network communication between clients and servers.
 
-| ![socket_system_calls_in_http_server.png](/assets/2025-03-11-go-scheduler/socket_system_calls_in_http_server.png) | 
-|:-----------------------------------------------------------------------------------------------------------------:| 
-|                    Figure 56-1: Overview of system calls used with stream sockets<sup>N</sup>                     |
+| <img src="/assets/2025-03-11-go-scheduler/socket_system_calls_in_http_server.png" width=300/> | 
+|:---------------------------------------------------------------------------------------------:| 
+|          Figure 56-1: Overview of system calls used with stream sockets<sup>N</sup>           |
 
 Specifically, `http.ListenAndServe()` leverages the following system calls: [`socket()`](https://man7.org/linux/man-pages/man2/socket.2.html), [`bind()`](https://man7.org/linux/man-pages/man2/bind.2.html), [`listen()`](https://man7.org/linux/man-pages/man2/listen.2.html), [`accept()`](https://man7.org/linux/man-pages/man2/accept.2.html) to create a TCP sockets, which  to create a TCP sockets, which is essentially [file descriptors](https://en.wikipedia.org/wiki/File_descriptor).
 It binds the listening socket to the specified address and port, listens for incoming connections, and creates a new connected socket to handle client requests—all without requiring you to write any socket-handling code.
 Similarly, `http.HandleFunc()` registers your handler functions to respond to HTTP requests, abstracting away the lower-level details like reading from and writing to the connection using system calls such as [`read()`](https://man7.org/linux/man-pages/man2/read.2.html) and [`write()`](https://man7.org/linux/man-pages/man2/write.2.html).
 
-<div style="text-align: center;">
-  <img src="/assets/2025-03-11-go-scheduler/go_http_server_meme.jpg" alt="socket_system_calls_in_http_server.png" width="600">
-</div>
+| <img src="/assets/2025-03-11-go-scheduler/go_http_server_meme.jpg" width=300/> | 
+|:------------------------------------------------------------------------------:| 
+|             Go abstracts system calls to provide simple interface              |
 
 But it's not that simple for an HTTP server to handle tens of thousands of concurrent requests efficiently.
 Go employs several techniques to achieve this. Let's take a closer look at some I/O models in Linux and how Go takes advantage of them.
 
-### Blocking and Non-Blocking I/O
+### Blocking I/O, Non-blocking I/O and I/O Multiplexing
 
 An I/O operation can be either blocking or non-blocking.
 When a thread issues a blocking system call, its execution is suspended until the system call completes with the requested data.
 In contrast, non-blocking I/O doesn't suspend the thread; instead, it immediately returns the requested data if available, or an error (<a href="https://man7.org/linux/man-pages/man3/errno.3.html#:~:text=POSIX.1%2D2001\).-,EAGAIN,-Resource%20temporarily%20unavailable">EAGAIN</a> or <a href="https://man7.org/linux/man-pages/man3/errno.3.html#:~:text=POSIX.1%2D2001\).-,EAGAIN,-Resource%20temporarily%20unavailable">EWOULDBLOCK</a>) if the data is not yet ready.
 Blocking I/O is simpler but inefficient as the application has to create N kernel threads for N connections, while non-blocking I/O is more complex but allows better resource utilization.
 Refer to the figures below for a better understanding of the two models.
-| <img src="/assets/2025-03-11-go-scheduler/blocking_io.png" style="width: 400px"/> | <img src="/assets/2025-03-11-go-scheduler/non_blocking_io.png" style="width: 400px"/> | 
-|:---------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------:| 
-|                    Figure 6.1. Blocking I/O model.<sup>N</sup>                    |                    Figure 6.2. Non-blocking I/O model.<sup>N</sup>                    |
+
+| <img src="/assets/2025-03-11-go-scheduler/blocking_io.png" width=400/> | <img src="/assets/2025-03-11-go-scheduler/non_blocking_io.png" width=400/> | 
+|:----------------------------------------------------------------------:|:---------------------------------------------------------------------------:| 
+|              Figure 6.1. Blocking I/O model.<sup>N</sup>               |               Figure 6.2. Non-blocking I/O model.<sup>N</sup>               |
 
 // Talk about how FD is created in network and file system.
 
