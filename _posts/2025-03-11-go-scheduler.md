@@ -295,21 +295,20 @@ The figure below illustrates the relationship between these three descriptors.
 
 | <img src="/assets/2025-03-11-go-scheduler/netpoll_descriptors.png" width=500/> |
 |:------------------------------------------------------------------------------:|
-|                  Relationship between descriptors in netpoll.                  |
+|                The relationship between descriptors in netpoll.                |
 
 
 Next, the [`init`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L40-L42) method of the network file descriptor is called, which in turn invokes the Go runtime's [`poll_runtime_pollOpen`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L243-L278) function.
-Under the hood,, this runtime function issues an [`epoll_ctl`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) system call with the [`EPOLL_CTL_ADD`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html#:~:text=op%20argument%20are%3A-,EPOLL_CTL_ADD,-Add%20an%20entry) operation, effectively registering the socket's file descriptor with the `epoll` interest list.
+Under the hood, this runtime function issues an [`epoll_ctl`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) system call with the [`EPOLL_CTL_ADD`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html#:~:text=op%20argument%20are%3A-,EPOLL_CTL_ADD,-Add%20an%20entry) operation, registering the socket's file descriptor with the `epoll` interest list.
 
 Building on the success of this model for network I/O, Go also leverages `epoll` for file I/O operations.
 Once a file is opened, [`syscall.SetNonblock(fd, true)`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/os/file_unix.go#L222-L222) is called to enable non-blocking mode on the file descriptor.
-Then, the aforementioned [`Init`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L41-L41) method is invoked to register the file descriptor with `epoll`, allowing file I/O to be multiplexed as well.
+Then, the aforementioned [`init`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L40-L42) method is invoked to register the file descriptor with `epoll`, allowing file I/O to be multiplexed as well.
 
 When a goroutine reads from socket or file, it eventually invokes the [`Read`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_unix.go#L141-L173) method of the poll file descriptor.
 In this method, the goroutine makes [`read`](https://man7.org/linux/man-pages/man2/read.2.html) system call to get any available data from the file descriptor.
 If the I/O data is not ready yet, i.e. `EAGAIN` or `EWOULDBLOCK` is returned from the system call, the Go runtime invokes [`poll_runtime_pollWait`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L336-L361) method to [park the goroutine](#park-goroutine).
-
-The behavior is similar when a goroutine writes to a socket or file—`Read` is replaced by [`Write`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/net.go#L201-L211), and the underlying `read` system call is replaced by the [`write`](https://man7.org/linux/man-pages/man2/write.2.html) system call.
+The behavior is similar when a goroutine writes to a socket or file with`Read` is replaced by [`Write`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/net.go#L201-L211), and the `read` system call is replaced by the [`write`](https://man7.org/linux/man-pages/man2/write.2.html) system call.
 
 // Mention netpoll: https://www.sobyte.net/post/2021-09/golang-netpoll
 
@@ -338,14 +337,14 @@ P's are created.
 
 ## Glossary
 
-### Park Goroutine
+### Goroutine Parking
 
 A function that is commonly used in the Go runtime to transition the current goroutine into the waiting state.
-The implementation of `gopark` can be found [here](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L390-L436) in the Go source code.
+The implementation of `gopark` can be found in the Go [source code](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L40-L42).
 The code snippet below mentions some important parts of the `gopark` function.
 
 ```go
-func gopark(unlockf func(*g, unsafe.Pointer) bool, lock unsafe.Pointer, reason waitReason, traceReason traceBlockReason, traceskip int) {
+func gopark(unlockf func(*g, unsafe.Pointer) bool, ...) {
   ...
   mp.waitunlockf = unlockf
   ...
