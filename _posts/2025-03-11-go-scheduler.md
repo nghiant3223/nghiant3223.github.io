@@ -261,13 +261,14 @@ Go employs several techniques to achieve this. Let's take a closer look at some 
 
 An I/O operation can be either blocking or non-blocking.
 When a thread issues a blocking system call, its execution is suspended until the system call completes with the requested data.
-In contrast, non-blocking I/O doesn't suspend the thread; instead, it immediately returns the requested data if available, or an error (<a href="https://man7.org/linux/man-pages/man3/errno.3.html#:~:text=POSIX.1%2D2001\).-,EAGAIN,-Resource%20temporarily%20unavailable">EAGAIN</a> or <a href="https://man7.org/linux/man-pages/man3/errno.3.html#:~:text=POSIX.1%2D2001\).-,EAGAIN,-Resource%20temporarily%20unavailable">EWOULDBLOCK</a>) if the data is not yet ready.
-Blocking I/O is simpler but inefficient as the application has to create N kernel threads for N connections, while non-blocking I/O is more complex but allows better resource utilization.
-Refer to the figures below for a better understanding of the two models.
+In contrast, non-blocking I/O doesn't suspend the thread; instead, it immediately returns the requested data if available, or an error (<a href="https://man7.org/linux/man-pages/man3/errno.3.html#:~:text=POSIX.1%2D2001\).-,EAGAIN,-Resource%20temporarily%20unavailable">`EAGAIN`</a> or <a href="https://man7.org/linux/man-pages/man3/errno.3.html#:~:text=POSIX.1%2D2001\).-,EAGAIN,-Resource%20temporarily%20unavailable">`EWOULDBLOCK`</a>) if the data is not yet ready.
+Blocking I/O is simpler to implement but inefficient, as it requires the application to spawn N kernel threads for N connections.
+In contrast, non-blocking I/O is more complex, but when implemented correctly, it enables significantly better resource utilization.
+See the figures below for a visual comparison of these two models.
 
 | <img src="/assets/2025-03-11-go-scheduler/blocking_io.png" width=300/> | <img src="/assets/2025-03-11-go-scheduler/non_blocking_io.png" width=300/> | 
 |:----------------------------------------------------------------------:|:--------------------------------------------------------------------------:| 
-|                    Blocking I/O model.<sup>[N]</sup>                     |                    Non-blocking I/O model.<sup>[N]</sup>                     |
+|                   Blocking I/O model.<sup>[N]</sup>                    |                   Non-blocking I/O model.<sup>[N]</sup>                    |
 
 Another I/O model worth mentioning is I/O multiplexing, in which [`select`](https://man7.org/linux/man-pages/man2/select.2.html), or [`poll`](https://man7.org/linux/man-pages/man2/poll.2.html) system call is used to wait for one of a set of file descriptors to become ready to perform I/O.
 In this model, the application blocks on one of these system calls, rather than on the actual I/O system calls, such as `recvfrom` shown in the figures above.
@@ -280,18 +281,35 @@ When `select` returns that the socket is readable, the application calls `recvfr
 ## I/O Model in Go
 
 Go uses a combination of non-blocking I/O and I/O multiplexing to handle I/O operations efficiently.
-However, because `select` and `poll` have performance limitations, as described [here](https://jvns.ca/blog/2017/06/03/async-io-on-linux--select--poll--and-epoll/#why-don-t-we-use-poll-and-select), Go avoids using them in favor of more efficient alternatives: [epoll](https://man7.org/linux/man-pages/man7/epoll.7.html) for Linux, [kqueue](https://man.freebsd.org/cgi/man.cgi?kqueue) for Darwin, and [IOCP](https://learn.microsoft.com/en-us/windows/win32/fileio/i-o-completion-ports) for Windows.
+Due to the performance limitations of `select` and `poll`—as explained in this [blog](https://jvns.ca/blog/2017/06/03/async-io-on-linux--select--poll--and-epoll/#why-don-t-we-use-poll-and-select)—Go avoids them in favor of more scalable alternatives: [epoll](https://man7.org/linux/man-pages/man7/epoll.7.html) on Linux, [kqueue](https://man.freebsd.org/cgi/man.cgi?kqueue) on macOS, and [IOCP](https://learn.microsoft.com/en-us/windows/win32/fileio/i-o-completion-ports) on Windows.
+In Go, `netpoll` is a set of functions that abstracts these 3 mechanisms, providing a unified interface for I/O multiplexing across different operating systems.
 
-Whenever a TCP listener [accepts](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/tcpsock.go#L374-L385) a new connection, it invokes the [`Init`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L41-L41) method of a [poll file descriptor](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L18-L18).
-This, in turn, invokes [`poll_runtime_pollOpen`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L243-L278) in Go runtime to execute [`epoll_ctl`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) system call with [`EPOLL_CTL_ADD`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html#:~:text=op%20argument%20are%3A-,EPOLL_CTL_ADD,-Add%20an%20entry) operation, adding a new entry to the interesting list of `epoll`.
-Building on the success of this approach for network I/O, Go also utilizes `epoll` for file I/O operations. When a file is opened, the earlier [`Init`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/os/file_unix.go#L237-L237) method is invoked to register the file descriptor with `epoll`, enabling file I/O to be multiplexed as well.
+## How `netpoll` Works
 
-// Talk about I/O multiplexing.
+When a TCP listener [accepts](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/tcpsock.go#L374-L385) a new connection, it performs the [`accept4`](https://man7.org/linux/man-pages/man2/accept.2.html) system call with the [`SOCK_NONBLOCK`](https://man7.org/linux/man-pages/man2/socket.2.html#:~:text=of%0A%20%20%20%20%20%20%20socket()%3A-,SOCK_NONBLOCK,-Set%20the%20O_NONBLOCK) flag to set the socket’s file descriptor to non-blocking mode.
+Also at this time, there are many *descriptors* are created to facilitate the incorporation of `epoll` into the Go runtime.
+[`netFD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L16-L27)(inside [`net`](https://github.com/golang/go/tree/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net) package) serves as a wrapper around network file descriptor.
+[`FD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L16-L27)(inside [`poll`](https://github.com/golang/go/tree/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll) package)—poll file descriptor—abstracts the system call with polling feature incorporated.
+[`pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_poll_runtime.go#L32-L34) is wrapper for the data returned from the Go runtime regarding `netpoll`.
+The figure below illustrates the relationship between these three descriptors.
 
-// Talk about sync and async I/O. Mention how [fcntl](https://man7.org/linux/man-pages/man2/fcntl.2.html) is used to set the file descriptor to non-blocking mode.
+| <img src="/assets/2025-03-11-go-scheduler/netpoll_descriptors.png" width=500/> |
+|:------------------------------------------------------------------------------:|
+|                  Relationship between descriptors in netpoll.                  |
 
-// Talk about how epoll works with asynchronous FD.
 
+Next, the [`init`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L40-L42) method of the network file descriptor is called, which in turn invokes the Go runtime's [`poll_runtime_pollOpen`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L243-L278) function.
+Under the hood,, this runtime function issues an [`epoll_ctl`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) system call with the [`EPOLL_CTL_ADD`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html#:~:text=op%20argument%20are%3A-,EPOLL_CTL_ADD,-Add%20an%20entry) operation, effectively registering the socket's file descriptor with the `epoll` interest list.
+
+Building on the success of this model for network I/O, Go also leverages `epoll` for file I/O operations.
+Once a file is opened, [`syscall.SetNonblock(fd, true)`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/os/file_unix.go#L222-L222) is called to enable non-blocking mode on the file descriptor.
+Then, the aforementioned [`Init`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L41-L41) method is invoked to register the file descriptor with `epoll`, allowing file I/O to be multiplexed as well.
+
+When a goroutine reads from socket or file, it eventually invokes the [`Read`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_unix.go#L141-L173) method of the poll file descriptor.
+In this method, the goroutine makes [`read`](https://man7.org/linux/man-pages/man2/read.2.html) system call to get any available data from the file descriptor.
+If the I/O data is not ready yet, i.e. `EAGAIN` or `EWOULDBLOCK` is returned from the system call, the Go runtime invokes [`poll_runtime_pollWait`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L336-L361) method to [park the goroutine](#park-goroutine).
+
+The behavior is similar when a goroutine writes to a socket or file—`Read` is replaced by [`Write`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/net.go#L201-L211), and the underlying `read` system call is replaced by the [`write`](https://man7.org/linux/man-pages/man2/write.2.html) system call.
 
 // Mention netpoll: https://www.sobyte.net/post/2021-09/golang-netpoll
 
@@ -318,11 +336,39 @@ P's are created.
 - LockOSThread, UnlockOSThread
     - https://www.sobyte.net/post/2021-06/golang-number-of-threads-in-the-running-program/
 
+## Glossary
+
+### Park Goroutine
+
+A function that is commonly used in the Go runtime to transition the current goroutine into the waiting state.
+The implementation of `gopark` can be found [here](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L390-L436) in the Go source code.
+The code snippet below mentions some important parts of the `gopark` function.
+
+```go
+func gopark(unlockf func(*g, unsafe.Pointer) bool, lock unsafe.Pointer, reason waitReason, traceReason traceBlockReason, traceskip int) {
+  ...
+  mp.waitunlockf = unlockf
+  ...
+  releasem(mp)
+  ...
+  mcall(park_m)
+}
+```
+
+Inside [`releasem`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime1.go#L612-L619) function, the goroutine's [`stackguard0`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L405-L405) is set to [`stackPreempt`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime1.go#L617-L617) to indirectly trigger a cooperative preemption.
+Control is then transferred to the [g0](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L529) system goroutine, which belongs to the same kernel thread currently running the goroutine, invoking the [`park_m`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L4089-L4142) function.
+
+Inside `park_m`, the goroutine status is set to waiting and the association between the goroutine and the kernel thread M is dropped.
+Additionally, `gopark` receives an `unlockf` callback function, which is executed in `park_m`.
+If `unlockf` returns `false`, the parked goroutine is immediately made runnable again and rescheduled on the same M using [`execute`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L3221-L3265).
+Finally, the [`schedule`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L3986-L4068) function is called to pick a runnable goroutine and transfer execution to it.
+
 ## References
 
-- [Goroutines in Go](https://golangbyexample.com/goroutines-golang/)
-- [Preemption in Go](https://unskilled.blog/posts/preemption-in-go-an-introduction/)
-- [Go Scheduling](https://www.kelche.co/blog/go/golang-scheduling)
+- unskilled.blog. [*Preemption in Go*](https://unskilled.blog/posts/preemption-in-go-an-introduction/).
+- kelche.co. [*Go Scheduling*](https://www.kelche.co/blog/go/golang-scheduling).
+- [N] Michael Kerrisk. *The Linux Programming Interface*.
+- [N], [N], [N] W. Richard Stevens, Bill Fenner, Andrew M. Rudoff. *Unix Network Programming*.
 
 <!-- 
 ## sobyte posts
@@ -371,8 +417,3 @@ P's are created.
 - https://draven.co/golang/docs/part3-runtime/ch06-concurrency/golang-netpoller/
 - PR that adds file I/O to netpoll: https://github.com/golang/go/commit/c05b06a12d005f50e4776095a60d6bd9c2c91fac
 -->
-
-## References
-
-- [N] Michael Kerrisk. *The Linux Programming Interface*.
-- [N], [N], [N] W. Richard Stevens, Bill Fenner, Andrew M. Rudoff. *Unix Network Programming*.
