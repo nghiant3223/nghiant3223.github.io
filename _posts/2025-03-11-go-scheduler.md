@@ -90,7 +90,7 @@ Three, somehow both goroutines run concurrently—almost magically.
 
 Fortunately, Go does support us to get the idea of what is happening with the scheduler.
 The [runtime/trace](https://go.dev/pkg/runtime/trace) package contains a powerful tool for understanding and troubleshooting Go programs.
-To make use of this, we first need to add instrument to the `main` method to export the traces to a file.
+To make use of this, we need to add instrument to the `main` method to export the traces to file.
 
 ```go
 func main() {
@@ -124,7 +124,7 @@ The problem was not addressed until Go 1.14, where asynchronous preemption was i
 In the Go runtime, there is a daemon running on a dedicated M without a P, called `sysmon` (i.e. system monitor). 
 When `sysmon` finds a goroutine that has been running for more than 10ms (as determined by the [`forcePreemptNS`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L6245-L6245) constant in Go runtime), it signals the kernel thread M by making system call `pthread_kill` to preempt the running goroutine.
 Yes, you didn't read that wrong. According to the [Linux manual page](https://man7.org/linux/man-pages/man3/pthread_kill.3.html), `pthread_kill` is used to send a signal to a thread, not to kill a thread.
-The signal sent is `SIGURG`, and the reason for choosing this signal is described in detail [here](https://github.com/golang/go/blob/go1.24.0/src/runtime/signal_unix.go#L43-L73).
+The signal sent is `SIGURG`, and the reason for choosing it is described in detail [here](https://github.com/golang/go/blob/go1.24.0/src/runtime/signal_unix.go#L43-L73).
 
 On the other side, there is a dedicated goroutine for handling signal installed in every P, called `gsignal`.
 Upon receiving `SIGURG`, the `gsignal` goroutine will enter the [asyncPreempt](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt_arm64.s) function, which is implemented in assembly, to save the goroutine's register and call [`asyncPreempt2`](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt.go#L302-L311) at line [47](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt_arm64.s#L47).
@@ -244,7 +244,7 @@ Go builds on top of fundamental [socket](https://en.wikipedia.org/wiki/Unix_doma
 
 | <img src="/assets/2025-03-11-go-scheduler/socket_system_calls_in_http_server.png" width=300/> | 
 |:---------------------------------------------------------------------------------------------:| 
-|                 Overview of system calls used with stream sockets<sup>[N]</sup>                 |
+|                Overview of system calls used with stream sockets<sup>[N]</sup>                |
 
 Specifically, `http.ListenAndServe()` leverages the following system calls: [`socket()`](https://man7.org/linux/man-pages/man2/socket.2.html), [`bind()`](https://man7.org/linux/man-pages/man2/bind.2.html), [`listen()`](https://man7.org/linux/man-pages/man2/listen.2.html), [`accept()`](https://man7.org/linux/man-pages/man2/accept.2.html) to create a TCP sockets, which  to create a TCP sockets, which is essentially [file descriptors](https://en.wikipedia.org/wiki/File_descriptor).
 It binds the listening socket to the specified address and port, listens for incoming connections, and creates a new connected socket to handle client requests—all without requiring you to write any socket-handling code.
@@ -286,24 +286,34 @@ In Go, `netpoll` is a set of functions that abstracts these 3 mechanisms, provid
 
 ## How `netpoll` Works
 
-When a TCP listener [accepts](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/tcpsock.go#L374-L385) a new connection, it performs the [`accept4`](https://man7.org/linux/man-pages/man2/accept.2.html) system call with the [`SOCK_NONBLOCK`](https://man7.org/linux/man-pages/man2/socket.2.html#:~:text=of%0A%20%20%20%20%20%20%20socket()%3A-,SOCK_NONBLOCK,-Set%20the%20O_NONBLOCK) flag to set the socket’s file descriptor to non-blocking mode.
-Also at this time, there are many *descriptors* are created to facilitate the incorporation of `epoll` into the Go runtime.
-[`netFD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L16-L27)(inside [`net`](https://github.com/golang/go/tree/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net) package) serves as a wrapper around network file descriptor.
-[`FD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L16-L27)(inside [`poll`](https://github.com/golang/go/tree/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll) package)—poll file descriptor—abstracts the system call with polling feature incorporated.
-[`pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_poll_runtime.go#L32-L34) is wrapper for the data returned from the Go runtime regarding `netpoll`.
-The figure below illustrates the relationship between these three descriptors.
+When a TCP listener [accepts](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/tcpsock.go#L374-L385) a new connection, it invokes the [`accept4`](https://man7.org/linux/man-pages/man2/accept.2.html) system call with the [`SOCK_NONBLOCK`](https://man7.org/linux/man-pages/man2/socket.2.html#:~:text=of%0A%20%20%20%20%20%20%20socket()%3A-,SOCK_NONBLOCK,-Set%20the%20O_NONBLOCK) flag to set the socket’s file descriptor to non-blocking mode.
+Following this, several descriptors are created to integrate with the Go runtime's `netpoll` system.
 
-| <img src="/assets/2025-03-11-go-scheduler/netpoll_descriptors.png" width=500/> |
+First, an instance of [`net.netFD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L16-L27) is initialized. It wraps the network file descriptor and provides higher-level abstractions for network operations.
+Next, an instance of `runtime.pollDesc` is created by the [`poll_runtime_pollOpen`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L243-L278) function.
+This instance contains the socket’s file descriptor and is used by the runtime to manage polling behavior.
+The `runtime.pollDesc` instance is then registered with the `epoll` interest list by executing the [`epoll_ctl`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) system call with the [`EPOLL_CTL_ADD`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html#:~:text=op%20argument%20are%3A-,EPOLL_CTL_ADD,-Add%20an%20entry) operation.
+Finally, an instance of `poll.FD` is initialized to encapsulate the logic for performing read and write system calls with I/O multiplexing capability.
+It indirectly holds a reference to `runtime.pollDesc` through its `pollDesc` field.
+
+The relationship between these four components is illustrated in the figure below.
+`net.netFD`, `poll.FD`, and `poll.pollDesc` are defined in the normal Go code, whereas `runtime.pollDesc` is part of the Go runtime implementation.
+
+| <img src="/assets/2025-03-11-go-scheduler/network_descriptors.png" width=500/> |
 |:------------------------------------------------------------------------------:|
-|                The relationship between descriptors in netpoll.                |
-
-
-Next, the [`init`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L40-L42) method of the network file descriptor is called, which in turn invokes the Go runtime's [`poll_runtime_pollOpen`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L243-L278) function.
-Under the hood, this runtime function issues an [`epoll_ctl`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) system call with the [`EPOLL_CTL_ADD`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html#:~:text=op%20argument%20are%3A-,EPOLL_CTL_ADD,-Add%20an%20entry) operation, registering the socket's file descriptor with the `epoll` interest list.
+|               Relationship between descriptors in Go networking.               |
 
 Building on the success of this model for network I/O, Go also leverages `epoll` for file I/O operations.
 Once a file is opened, [`syscall.SetNonblock(fd, true)`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/os/file_unix.go#L222-L222) is called to enable non-blocking mode on the file descriptor.
-Then, the aforementioned [`init`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L40-L42) method is invoked to register the file descriptor with `epoll`, allowing file I/O to be multiplexed as well.
+Then, `poll.FD`, `poll.pollDesc` and `runtime.pollDesc` are initialized to register the file descriptor with `epoll`, allowing file I/O to be multiplexed as well.
+
+The relationship between these four components is depicted in the figure below.
+While `os.File`, `poll.FD`, and `poll.pollDesc` are implemented in the standard Go library, `runtime.pollDesc` resides within the Go runtime itself.
+
+| <img src="/assets/2025-03-11-go-scheduler/file_descriptors.png" width=500/> |
+|:---------------------------------------------------------------------------:|
+|             Relationship between descriptors in Go file system.             |
+
 
 When a goroutine reads from socket or file, it eventually invokes the [`Read`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_unix.go#L141-L173) method of the poll file descriptor.
 In this method, the goroutine makes [`read`](https://man7.org/linux/man-pages/man2/read.2.html) system call to get any available data from the file descriptor.
