@@ -298,14 +298,14 @@ Since [`epoll`](https://man7.org/linux/man-pages/man7/epoll.7.html) operates on 
 Finally, an instance of [`poll.FD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_unix.go#L17-L48) is initialized to encapsulate logic for read and write operations with polling support.
 It indirectly references [`runtime.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L72-L115) via [`poll.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_poll_runtime.go#L32-L34), serves as a lightweight wrapper around a pointer to [`runtime.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L72-L115).
 
-Building on the success of this model for network I/O, Go also leverages [`epoll`](https://man7.org/linux/man-pages/man7/epoll.7.html) for file I/O operations.
+Building on the success of this model for network I/O, Go also leverages [`epoll`](https://man7.org/linux/man-pages/man7/epoll.7.html) for file I/O.
 Once a file is opened, [`syscall.SetNonblock(fd, true)`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/os/file_unix.go#L222-L222) is called to enable non-blocking mode on the file descriptor.
 Then, [`poll.FD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_unix.go#L17-L48), [`poll.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_poll_runtime.go#L32-L34) and [`runtime.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L72-L115) are initialized to register the file descriptor with [`epoll`](https://man7.org/linux/man-pages/man7/epoll.7.html), allowing file I/O to be multiplexed as well.
 
 The relationship between these descriptors is depicted in the figure below.
 Meanwhile [`net.netFD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L16-L27), [`os.File`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/os/types.go#L15-L20), [`poll.FD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_unix.go#L17-L48), and [`poll.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_poll_runtime.go#L32-L34) are implemented in normal Go code (specifically in Go standard library), [`runtime.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L72-L115) resides within the Go runtime itself.
 
-| <img src="/assets/2025-03-11-go-scheduler/netpoll_descriptors.png" width=500/> |
+| <img src="/assets/2025-03-11-go-scheduler/netpoll_descriptors.png" width=750/> |
 |:------------------------------------------------------------------------------:|
 |                   Relationship of descriptors in `netpoll`.                    |
 
