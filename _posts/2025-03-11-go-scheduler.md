@@ -286,39 +286,36 @@ In Go, `netpoll` is a set of functions that abstracts these 3 mechanisms, provid
 
 ## How `netpoll` Works
 
+### Registering Goroutine With [`epoll`](https://man7.org/linux/man-pages/man7/epoll.7.html)
+
 When a TCP listener [accepts](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/tcpsock.go#L374-L385) a new connection, it invokes the [`accept4`](https://man7.org/linux/man-pages/man2/accept.2.html) system call with the [`SOCK_NONBLOCK`](https://man7.org/linux/man-pages/man2/socket.2.html#:~:text=of%0A%20%20%20%20%20%20%20socket()%3A-,SOCK_NONBLOCK,-Set%20the%20O_NONBLOCK) flag to set the socket’s file descriptor to non-blocking mode.
 Following this, several descriptors are created to integrate with the Go runtime's `netpoll` system.
 
-First, an instance of [`net.netFD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L16-L27) is initialized. It wraps the network file descriptor and provides higher-level abstractions for network operations.
-Next, an instance of `runtime.pollDesc` is created by the [`poll_runtime_pollOpen`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L243-L278) function.
-This instance contains the socket’s file descriptor and is used by the runtime to manage polling behavior.
-The `runtime.pollDesc` instance is then registered with the `epoll` interest list by executing the [`epoll_ctl`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) system call with the [`EPOLL_CTL_ADD`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html#:~:text=op%20argument%20are%3A-,EPOLL_CTL_ADD,-Add%20an%20entry) operation.
-Finally, an instance of `poll.FD` is initialized to encapsulate the logic for performing read and write system calls with I/O multiplexing capability.
-It indirectly holds a reference to `runtime.pollDesc` through its `pollDesc` field.
+First, an instance of [`net.netFD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L16-L27) is initialized to wrap the socket's file descriptor and provide higher-level abstractions for network operations.
+Next, the Go runtime creates a [`runtime.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L72-L115) instance—containing scheduling data and [references to the goroutine](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L98-L101) involved in I/O—using the [`poll_runtime_pollOpen`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L243-L278) function.
+The socket's file descriptor is then registered with the [`epoll`](https://man7.org/linux/man-pages/man7/epoll.7.html) interest list via the [`epoll_ctl`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) system call using the [`EPOLL_CTL_ADD`](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html#:~:text=op%20argument%20are%3A-,EPOLL_CTL_ADD,-Add%20an%20entry) operation.
+Since [`epoll`](https://man7.org/linux/man-pages/man7/epoll.7.html) operates on file descriptors rather than goroutines, this system call also associates the address of [`runtime.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L72-L115) with the file descriptor, enabling the scheduler to identify which goroutine to resume when [`epoll`](https://man7.org/linux/man-pages/man7/epoll.7.html) signals readiness.
+Finally, an instance of [`poll.FD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_unix.go#L17-L48) is initialized to encapsulate logic for read and write operations with polling support.
+It indirectly references [`runtime.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L72-L115) via [`poll.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_poll_runtime.go#L32-L34), serves as a lightweight wrapper around a pointer to [`runtime.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L72-L115).
 
-The relationship between these four components is illustrated in the figure below.
-`net.netFD`, `poll.FD`, and `poll.pollDesc` are defined in the normal Go code, whereas `runtime.pollDesc` is part of the Go runtime implementation.
-
-| <img src="/assets/2025-03-11-go-scheduler/network_descriptors.png" width=500/> |
-|:------------------------------------------------------------------------------:|
-|               Relationship between descriptors in Go networking.               |
-
-Building on the success of this model for network I/O, Go also leverages `epoll` for file I/O operations.
+Building on the success of this model for network I/O, Go also leverages [`epoll`](https://man7.org/linux/man-pages/man7/epoll.7.html) for file I/O operations.
 Once a file is opened, [`syscall.SetNonblock(fd, true)`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/os/file_unix.go#L222-L222) is called to enable non-blocking mode on the file descriptor.
-Then, `poll.FD`, `poll.pollDesc` and `runtime.pollDesc` are initialized to register the file descriptor with `epoll`, allowing file I/O to be multiplexed as well.
+Then, [`poll.FD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_unix.go#L17-L48), [`poll.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_poll_runtime.go#L32-L34) and [`runtime.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L72-L115) are initialized to register the file descriptor with [`epoll`](https://man7.org/linux/man-pages/man7/epoll.7.html), allowing file I/O to be multiplexed as well.
 
-The relationship between these four components is depicted in the figure below.
-While `os.File`, `poll.FD`, and `poll.pollDesc` are implemented in the standard Go library, `runtime.pollDesc` resides within the Go runtime itself.
+The relationship between these descriptors is depicted in the figure below.
+Meanwhile [`net.netFD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L16-L27), [`os.File`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/os/types.go#L15-L20), [`poll.FD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_unix.go#L17-L48), and [`poll.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_poll_runtime.go#L32-L34) are implemented in normal Go code (specifically in Go standard library), [`runtime.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L72-L115) resides within the Go runtime itself.
 
-| <img src="/assets/2025-03-11-go-scheduler/file_descriptors.png" width=500/> |
-|:---------------------------------------------------------------------------:|
-|             Relationship between descriptors in Go file system.             |
+| <img src="/assets/2025-03-11-go-scheduler/netpoll_descriptors.png" width=500/> |
+|:------------------------------------------------------------------------------:|
+|                   Relationship of descriptors in `netpoll`.                    |
 
 
-When a goroutine reads from socket or file, it eventually invokes the [`Read`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_unix.go#L141-L173) method of the poll file descriptor.
+### Polling File Descriptors
+
+When a goroutine reads from socket or file, it eventually invokes the [`Read`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_unix.go#L141-L173) method of [`poll.FD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_unix.go#L17-L48).
 In this method, the goroutine makes [`read`](https://man7.org/linux/man-pages/man2/read.2.html) system call to get any available data from the file descriptor.
-If the I/O data is not ready yet, i.e. `EAGAIN` or `EWOULDBLOCK` is returned from the system call, the Go runtime invokes [`poll_runtime_pollWait`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L336-L361) method to [park the goroutine](#park-goroutine).
-The behavior is similar when a goroutine writes to a socket or file with`Read` is replaced by [`Write`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/net.go#L201-L211), and the `read` system call is replaced by the [`write`](https://man7.org/linux/man-pages/man2/write.2.html) system call.
+If the I/O data is not ready yet, i.e. `EAGAIN` or `EWOULDBLOCK` is returned, the Go runtime invokes [`poll_runtime_pollWait`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L336-L361) method to [park the goroutine](#goroutine-parking).
+The behavior is similar when a goroutine writes to a socket or file, with the main difference being that `Read` is replaced by [`Write`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/net.go#L201-L211), and the `read` system call is substituted with [`write`](https://man7.org/linux/man-pages/man2/write.2.html).
 
 // Mention netpoll: https://www.sobyte.net/post/2021-09/golang-netpoll
 
@@ -364,13 +361,13 @@ func gopark(unlockf func(*g, unsafe.Pointer) bool, ...) {
 }
 ```
 
-Inside [`releasem`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime1.go#L612-L619) function, the goroutine's [`stackguard0`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L405-L405) is set to [`stackPreempt`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime1.go#L617-L617) to indirectly trigger a cooperative preemption.
-Control is then transferred to the [g0](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L529) system goroutine, which belongs to the same kernel thread currently running the goroutine, invoking the [`park_m`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L4089-L4142) function.
+Inside [`releasem`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime1.go#L612-L619) function, the goroutine's [`stackguard0`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L405-L405) is set to [`stackPreempt`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime1.go#L617-L617) to trigger an eventual cooperative preemption.
+Control is then transferred to the [g0](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L529) system goroutine, which belongs to the same kernel thread currently running the goroutine, to invoke the [`park_m`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L4089-L4142) function.
 
 Inside `park_m`, the goroutine status is set to waiting and the association between the goroutine and the kernel thread M is dropped.
 Additionally, `gopark` receives an `unlockf` callback function, which is executed in `park_m`.
 If `unlockf` returns `false`, the parked goroutine is immediately made runnable again and rescheduled on the same M using [`execute`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L3221-L3265).
-Finally, the [`schedule`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L3986-L4068) function is called to pick a runnable goroutine and transfer execution to it.
+Finally, the [`schedule`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L3986-L4068) function is called to pick a runnable goroutine and execute it on this M.
 
 ## References
 
