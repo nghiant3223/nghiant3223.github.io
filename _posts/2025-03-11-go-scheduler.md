@@ -60,26 +60,26 @@ In order to make sure that only one goroutine can run at a time, we set the maxi
 package main
 
 import (
-  "runtime"
-  "time"
+    "runtime"
+    "time"
 )
 
 func fibonacci(n int) int {
-  if n <= 1 {
-      return n
-  }   
-  previous, current := 0, 1
-  for i := 2; i <= n; i++ {
-    previous, current = current, previous+current
-  }
-  return current
+    if n <= 1 {
+        return n
+    }   
+    previous, current := 0, 1
+    for i := 2; i <= n; i++ {
+        previous, current = current, previous+current
+    }
+    return current
 }
 
 func main() {
-  go fibonacci(1_000_000_000)
-  go fibonacci(2_000_000_000)
+    go fibonacci(1_000_000_000)
+    go fibonacci(2_000_000_000)
 
-  time.Sleep(3*time.Second)
+    time.Sleep(3*time.Second)
 }
 ```
 
@@ -94,10 +94,10 @@ To make use of this, we need to add instrument to the `main` method to export th
 
 ```go
 func main() {
-  file, _ := os.Create("trace.out")
-  _ = trace.Start(file)
-  defer trace.Stop()
-  ...
+    file, _ := os.Create("trace.out")
+    _ = trace.Start(file)
+    defer trace.Stop()
+    ...
 }
 ```
 
@@ -149,7 +149,6 @@ This will be discussed in the next section.
 Do you wonder why I didn't use `fmt.Printf` in each iteration to see whether both goroutines have chance to run?
 That's because if I had done that, it would have become a cooperative preemption, not a non-cooperative preemption anymore.
 
-
 #### Disassembly the Program
 To better understand this, let's compile the program and analyze its assembly code.
 Since the Go compiler applies various optimizations that can make debugging more challenging, we need to disable them when building the program.
@@ -185,7 +184,7 @@ The stack guard is a special value placed at the end of the stack. When the stac
 
 `SUB $48, RSP, R17` loads the goroutine's stack pointer from the register `RPS` to register `R17` and subtracts 48 from it.
 `CMP R16, R17` compares the stack guard with the stack pointer, and `BLS 96(PC)` branches to the instruction located 96 instructions ahead in the program if the stack pointer is less than or equal to the stack guard.
-Why less than or equal (≤) but not greater or equal (≥)? Because the stack grows downward, so the stack pointer is always greater than the stack guard.
+Why less than or equal (≤) but not greater or equal (≥)? Because the stack grows downward, the stack pointer is always greater than the stack guard.
 
 Have you ever wondered why these instructions don’t appear in the Go code but still show up in the assembly?
 That's because upon compiling, Go compiler automatically inserts these instructions in every function [prologue](https://en.wikipedia.org/wiki/Function_prologue_and_epilogue).
@@ -203,23 +202,28 @@ For reference, see the relevant code: [sysmon preemption](https://github.com/gol
 
 #### Trace Visualization
 
-Alright, let's run the program again—make sure `GOMAXPROCS=1` is set—and then check out the trace.
+Alright, let's rerun the program—make sure `GOMAXPROCS=1` is set—and then check out the trace.
 
 ![](/assets/2025-03-11-go-scheduler/runtime_trace_cooperative_preempt.png)
 
 You can clearly see that goroutines relinquish the logical processor after just tens of microseconds—unlike with non-cooperative preemption, where they might retain it for over 10 milliseconds.
-Notably, G9’s stack trace ends at the `fmt.Printf` call inside the loop body, illustrating how cooperative preemption allows goroutines to voluntarily yield control.
-This illustrates cooperative preemption, where goroutines voluntarily yield the processor.
+Notably, G9’s stack trace ends at the `fmt.Printf` call inside the loop body, demonstrating the stack guard check in function prologue.
+This trace precisely illustrates cooperative preemption, where goroutines *voluntarily* yield the processor.
 
-## Handling Syscall
+## Handling System Call
 
 // Mention thread cannot both be in syscall and running Go code at the same time.
+https://www.sobyte.net/post/2022-07/go-gmp/#2-new-logic-for-p
+
+https://utcc.utoronto.ca/~cks/space/blog/programming/GoSchedulerAndSyscalls
+https://stackoverflow.com/questions/16977988/details-of-syscall-rawsyscall-syscall-syscall-in-go
+https://www.cnblogs.com/flhs/p/12709962.html
 
 ## Network I/O and File I/O
 
 This [survey](https://go.dev/blog/survey2024h2/what.svg) shows that 75% of Go uses cases are web services.
 And it's not a coincidence, Go is designed to be fast and efficient for network operation to solve the notorious problem—[C10K](https://en.wikipedia.org/wiki/C10k_problem).
-To understand how Go solves this problem, let's take a look at how Go handles I/O operations under the hood.
+To see how Go solves this problem, let's take a look at how Go handles I/O operations under the hood.
 
 ### HTTP Server Under the Hood
 
@@ -231,11 +235,11 @@ package main
 import "net/http"
 
 func main() {
-  http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-    w.WriteHeader(200)
-  })
-  
-  http.ListenAndServe(":80", nil)
+    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(200)
+    })
+	
+    http.ListenAndServe(":80", nil)
 }
 ```
 
@@ -268,7 +272,7 @@ See the figures below for a visual comparison of these two models.
 
 | <img src="/assets/2025-03-11-go-scheduler/blocking_io.png" width=300/> | <img src="/assets/2025-03-11-go-scheduler/non_blocking_io.png" width=300/> | 
 |:----------------------------------------------------------------------:|:--------------------------------------------------------------------------:| 
-|                   Blocking I/O model.<sup>[N]</sup>                    |                   Non-blocking I/O model.<sup>[N]</sup>                    |
+|                    Blocking I/O model<sup>[N]</sup>                    |                    Non-blocking I/O model<sup>[N]</sup>                    |
 
 Another I/O model worth mentioning is I/O multiplexing, in which [`select`](https://man7.org/linux/man-pages/man2/select.2.html), or [`poll`](https://man7.org/linux/man-pages/man2/poll.2.html) system call is used to wait for one of a set of file descriptors to become ready to perform I/O.
 In this model, the application blocks on one of these system calls, rather than on the actual I/O system calls, such as `recvfrom` shown in the figures above.
@@ -276,7 +280,7 @@ When `select` returns that the socket is readable, the application calls `recvfr
 
 | <img src="/assets/2025-03-11-go-scheduler/io_multiplexing.png" width=500/> |
 |:--------------------------------------------------------------------------:|
-|                   I/O multiplexing model.<sup>[N]</sup>                    |
+|                    I/O multiplexing model<sup>[N]</sup>                    |
 
 ## I/O Model in Go
 
@@ -284,9 +288,9 @@ Go uses a combination of non-blocking I/O and I/O multiplexing to handle I/O ope
 Due to the performance limitations of `select` and `poll`—as explained in this [blog](https://jvns.ca/blog/2017/06/03/async-io-on-linux--select--poll--and-epoll/#why-don-t-we-use-poll-and-select)—Go avoids them in favor of more scalable alternatives: [epoll](https://man7.org/linux/man-pages/man7/epoll.7.html) on Linux, [kqueue](https://man.freebsd.org/cgi/man.cgi?kqueue) on macOS, and [IOCP](https://learn.microsoft.com/en-us/windows/win32/fileio/i-o-completion-ports) on Windows.
 In Go, `netpoll` is a set of functions that abstracts these 3 mechanisms, providing a unified interface for I/O multiplexing across different operating systems.
 
-## How `netpoll` Works
+## How *netpoll* Works
 
-### Registering Goroutine With [`epoll`](https://man7.org/linux/man-pages/man7/epoll.7.html)
+### Registering Goroutine with [`epoll`](https://man7.org/linux/man-pages/man7/epoll.7.html)
 
 When a TCP listener [accepts](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/tcpsock.go#L374-L385) a new connection, it invokes the [`accept4`](https://man7.org/linux/man-pages/man2/accept.2.html) system call with the [`SOCK_NONBLOCK`](https://man7.org/linux/man-pages/man2/socket.2.html#:~:text=of%0A%20%20%20%20%20%20%20socket()%3A-,SOCK_NONBLOCK,-Set%20the%20O_NONBLOCK) flag to set the socket’s file descriptor to non-blocking mode.
 Following this, several descriptors are created to integrate with the Go runtime's `netpoll` system.
@@ -305,9 +309,9 @@ Then, [`poll.FD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a599
 The relationship between these descriptors is depicted in the figure below.
 Meanwhile [`net.netFD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_posix.go#L16-L27), [`os.File`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/os/types.go#L15-L20), [`poll.FD`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_unix.go#L17-L48), and [`poll.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/poll/fd_poll_runtime.go#L32-L34) are implemented in normal Go code (specifically in Go standard library), [`runtime.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L72-L115) resides within the Go runtime itself.
 
-| <img src="/assets/2025-03-11-go-scheduler/netpoll_descriptors.png" width=750/> |
-|:------------------------------------------------------------------------------:|
-|                   Relationship of descriptors in `netpoll`.                    |
+| <img src="/assets/2025-03-11-go-scheduler/netpoll_descriptors.png"/> |
+|:--------------------------------------------------------------------:|
+|              Relationship of descriptors in `netpoll`               |
 
 
 ### Polling File Descriptors
@@ -317,6 +321,17 @@ In this method, the goroutine makes [`read`](https://man7.org/linux/man-pages/ma
 If the I/O data is not ready yet, i.e. `EAGAIN` or `EWOULDBLOCK` is returned, the Go runtime invokes [`poll_runtime_pollWait`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L336-L361) method to [park the goroutine](#goroutine-parking).
 The behavior is similar when a goroutine writes to a socket or file, with the main difference being that `Read` is replaced by [`Write`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/net.go#L201-L211), and the `read` system call is substituted with [`write`](https://man7.org/linux/man-pages/man2/write.2.html).
 
+Now that the goroutine is in waiting state, it is the responsibility of `netpoll` to provide the goroutine to the scheduler when the goroutine's file descriptor is ready for I/O so that it can be resumed.
+You may be surprised to learn that `netpoll` is nothing more than the [`netpoll`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll_epoll.go#L91-L176) function implemented in the Go runtime.
+In this function, [`epoll_wait`](https://man7.org/linux/man-pages/man2/epoll_wait.2.html) system call is used to monitor up to 128 file descriptors in a specified amount of time.
+This system call returns the [`runtime.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L72-L115) instances that were previously registered (as described in the previous section) for each file descriptor that becomes ready.
+Finally, `netpoll` extracts the goroutine references from [`runtime.pollDesc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll.go#L72-L115) instances and hands them off to the scheduler.
+
+But when is the [`netpoll`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/netpoll_epoll.go#L91-L176) function actually called?
+It's triggered when a processor  P looks for a runnable goroutine to execute, as outlined in [runtime schedule](#runtime-schedule).
+According to the [`findRunnable`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L3267-L3646) function, `netpoll` is only consulted by the scheduler if there are no goroutines available in either the local run queue of the current P or the global run queue.
+This means even if the file descriptor is ready for I/O, the associated goroutine is not necessarily woken up immediately.
+
 // Mention netpoll: https://www.sobyte.net/post/2021-09/golang-netpoll
 
 // Mention: https://www.sobyte.net/post/2022-01/go-netpoller/
@@ -325,16 +340,38 @@ The behavior is similar when a goroutine writes to a socket or file, with the ma
 
 // https://tuhuynh.com/posts/nio-under-the-hood/
 
-
 ## Garbage Collector
 
 Another equally important part of the Go runtime is the garbage collector.
 
-## How Go Program Starts
+## The Scheduler Overview
 
 // Mention what happens when Go program starts: how many threads are created, how many goroutines are created, how many
 P's are created.
 
+<!--
+In schedinit:
+  - initialize GOMAXPROCS number of idle P
+In newproc -> wakep:
+  - create M (with startm) only when there is idle P
+In startm -> newm -> newm1 -> newosproc -> clone -> mstart -> mstart1 -> schedule -> findRunnable -> execute -> gogo -> goexit -> schedule 
+
+M is not destroyed but will put into sleep by stopm (using futexes under the hood)
+
+entersyscall:
+- disassociate m and p, m.oldp = p
+- P status us set to _Psyscall
+
+exitsyscal:
+- exitsyscallfast:
+  - if M has oldp and P is _Psyscall, then associate M with P, change P status to _Prunning: wirep
+  - otherwise, get an idle P if there is any then associate M with P: exitsyscallfast_pidle
+- exitsyscall0: slow path: 
+
+-->
+
+// https://www.sobyte.net/post/2022-07/go-bootstrap/
+// https://www.sobyte.net/post/2022-07/go-gmp/
 // https://www.sobyte.net/post/2021-09/golang-netpoll/#groutinue-scheduling-for-io-events
 
 ## Runtime API
@@ -346,18 +383,18 @@ P's are created.
 
 ### Goroutine Parking
 
-A function that is commonly used in the Go runtime to transition the current goroutine into the waiting state.
-The implementation of `gopark` can be found in the Go [source code](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L40-L42).
-The code snippet below mentions some important parts of the `gopark` function.
+A commonly used procedure in the Go runtime for transitioning the current goroutine into a waiting state.
+It is implemented in [`gopark`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L40-L42) function.
+The snippet below highlights some of its key aspects.
 
 ```go
 func gopark(unlockf func(*g, unsafe.Pointer) bool, ...) {
-  ...
-  mp.waitunlockf = unlockf
-  ...
-  releasem(mp)
-  ...
-  mcall(park_m)
+    ...
+    mp.waitunlockf = unlockf
+    ...
+    releasem(mp)
+    ...
+    mcall(park_m)
 }
 ```
 
@@ -367,7 +404,16 @@ Control is then transferred to the [g0](https://github.com/golang/go/blob/390140
 Inside `park_m`, the goroutine status is set to waiting and the association between the goroutine and the kernel thread M is dropped.
 Additionally, `gopark` receives an `unlockf` callback function, which is executed in `park_m`.
 If `unlockf` returns `false`, the parked goroutine is immediately made runnable again and rescheduled on the same M using [`execute`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L3221-L3265).
-Finally, the [`schedule`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L3986-L4068) function is called to pick a runnable goroutine and execute it on this M.
+Finally, the [`schedule`](#runtime-schedule) function is called to pick a runnable goroutine and execute it on this M.
+
+### Runtime `schedule`
+
+A function implemented in the Go runtime that identifies runnable goroutines and schedules them for execution.
+This function is used when a new kernel thread is created, a goroutine is parked or preempted, [`Gosched`](https://pkg.go.dev/runtime#Gosched) is called, when a goroutine finishes system call or when a goroutine returns.
+
+<!--
+https://draven.co/golang/docs/part3-runtime/ch06-concurrency/golang-goroutine/#656-%e8%a7%a6%e5%8f%91%e8%b0%83%e5%ba%a6
+-->
 
 ## References
 
@@ -422,4 +468,5 @@ Finally, the [`schedule`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e
 - https://notes.shichao.io/unp/ch6/#nonblocking-io-model
 - https://draven.co/golang/docs/part3-runtime/ch06-concurrency/golang-netpoller/
 - PR that adds file I/O to netpoll: https://github.com/golang/go/commit/c05b06a12d005f50e4776095a60d6bd9c2c91fac
+- https://www.sobyte.net/post/2022-02/where-is-goexit-from/
 -->
