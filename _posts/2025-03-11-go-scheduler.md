@@ -90,7 +90,7 @@ Three, somehow both goroutines run concurrently—almost magically.
 
 Fortunately, Go does support us to get the idea of what is happening with the scheduler.
 The [runtime/trace](https://go.dev/pkg/runtime/trace) package contains a powerful tool for understanding and troubleshooting Go programs.
-To make use of this, we need to add instrument to the `main` method to export the traces to file.
+To use it, we need to add instrument to the `main` method to export the traces to file.
 
 ```go
 func main() {
@@ -104,7 +104,7 @@ func main() {
 After the program finishes running, we use the command `go tool trace trace.out` to visualize the trace.
 I prepared the `trace.out` file [here](/assets/2025-03-11-go-scheduler/non_cooperative_preempt_trace.out) just in case you want to play with it.
 In the visualization, the horizontal axis represents which goroutine is running on the P at a given time.
-As expected, there is only one logical processor P named "Proc 0", resulted from `runtime.GOMAXPROCS(1)`.
+As expected, there is only one logical processor P named "Proc 0", resulted from `GOMAXPROCS=1`.
 
 ![runtime_trace_start.png](/assets/2025-03-11-go-scheduler/runtime_trace_start.png)
 
@@ -114,7 +114,7 @@ After a few microseconds, still on Proc 0, goroutine G10 is scheduled to execute
 ![runtime_trace_preempt.png](/assets/2025-03-11-go-scheduler/runtime_trace_preempt.png)
 
 By zooming out (pressing 'S') and scrolling slightly to the right, you can observe that G10 is later replaced by another goroutine, G9, which is the next instance running the `fibonacci` function.
-This goroutine is also created and executed on Proc 0. Please pay attention to the `runtime.asyncPreempt:47` in the visualization, I will explain this in a moment.
+This goroutine is also executed on Proc 0. Pay attention to the `runtime.asyncPreempt:47` in the visualization, I will explain this in a moment.
 
 So, from this demonstration, it can be concluded that the Go scheduler is capable of preempting goroutines that are CPU-bound.
 But how is it possible because if a goroutines continuously taking up the CPU, how can the scheduler preempt it?
@@ -124,15 +124,16 @@ The problem was not addressed until Go 1.14, where asynchronous preemption was i
 In the Go runtime, there is a daemon running on a dedicated M without a P, called `sysmon` (i.e. system monitor). 
 When `sysmon` finds a goroutine that has been running for more than 10ms (as determined by the [`forcePreemptNS`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L6245-L6245) constant in Go runtime), it signals the kernel thread M by making system call `pthread_kill` to preempt the running goroutine.
 Yes, you didn't read that wrong. According to the [Linux manual page](https://man7.org/linux/man-pages/man3/pthread_kill.3.html), `pthread_kill` is used to send a signal to a thread, not to kill a thread.
-The signal sent is `SIGURG`, and the reason for choosing it is described in detail [here](https://github.com/golang/go/blob/go1.24.0/src/runtime/signal_unix.go#L43-L73).
+The signal sent is `SIGURG`, and the reason for choosing it is described [here](https://github.com/golang/go/blob/go1.24.0/src/runtime/signal_unix.go#L43-L73).
 
 In every kernel thread M, there is a dedicated goroutine for handling signal called `gsignal`.
 Upon receiving `SIGURG`, the execution of the program transfer to the signal handler, registered by a call to [`initsig(false)`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L1879-L1879) function upon kernel thread initialization.
-Note that the signal handler can run concurrently with goroutines or the scheduler, as depicted in the figure below.
+Note that the signal handler can run concurrently with goroutines or the Go scheduler, as depicted in the figure below.
+The execution switch from main program to signal handler is triggered by the kernel<a href="https://stackoverflow.com/questions/6949025/how-are-asynchronous-signal-handlers-executed-on-linux/"><sup>N,</sup></a><a href="https://unix.stackexchange.com/questions/733013/how-is-a-signal-delivered-in-linux"><sup>N</sup></a>.
 
-| <img src="/assets/2025-03-11-go-scheduler/signal_delivery_and_handler_execution.png" with=500 /> | 
-|:------------------------------------------------------------------------------------------------:| 
-|                       Signal delivery and handler execution<sup>[N]</sup>                        |
+| <img src="/assets/2025-03-11-go-scheduler/signal_delivery_and_handler_execution.png" width=500 /> | 
+|:-------------------------------------------------------------------------------------------------:| 
+|                        Signal delivery and handler execution<sup>[N]</sup>                        |
 
 The `gsignal` goroutine will enter the [asyncPreempt](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt_arm64.s) function, which is implemented in assembly, to save the goroutine's register and call [`asyncPreempt2`](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt.go#L302-L311) at line [47](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt_arm64.s#L47).
 That's reason for the appearance of `runtime.asyncPreempt:47` in the visualization.
@@ -219,10 +220,15 @@ This trace precisely illustrates cooperative preemption, where goroutines *volun
 
 ## Handling System Calls
 
-System calls are services provided by the kernel to user-space applications via an API.
-These services include operations such as reading a file, establishing a TCP connection, or requesting memory.
-Go uses an M:N threading model, enhanced by the concept of logical processors (P), which makes its handling of system calls particularly interesting.
-Let's dive into how it works.
+System calls are services provided by the kernel that user-space applications access through an API.
+These services include fundamental operations, for example, reading files, establishing TCP connections, or allocating memory.
+In Go, you rarely need to interact with system calls directly, as the standard library offers higher-level abstractions that simplify these tasks.
+
+However, understanding how system calls work is crucial to gaining insight into the Go runtime and standard library internals.
+Go's runtime employs an M:N threading model, further optimized by the use of logical processors P, making its approach to handling system calls particularly interesting.
+Let's explore how it all works.
+
+// Mention that when executing syscall, the P can be seized by the sysmon and transition to _Pidle. that's why exitsyscall must check for _Pidle state.
 
 // Mention thread cannot both be in syscall and running Go code at the same time.
 https://www.sobyte.net/post/2022-07/go-gmp/#2-new-logic-for-p
