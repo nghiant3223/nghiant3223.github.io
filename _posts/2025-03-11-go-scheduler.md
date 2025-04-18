@@ -47,6 +47,43 @@ This blog post primarily focuses on [Go 1.24](https://tip.golang.org/doc/go1.24)
 
 // Mention local, global is circular queue for efficiency
 
+## Scheduling Glossary
+
+### Goroutine Parking
+
+A commonly used procedure in the Go runtime for transitioning the current goroutine into a waiting state.
+It is implemented in [`gopark`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L40-L42) function.
+The snippet below highlights some of its key aspects.
+
+```go
+func gopark(unlockf func(*g, unsafe.Pointer) bool, ...) {
+    ...
+    mp.waitunlockf = unlockf
+    ...
+    releasem(mp)
+    ...
+    mcall(park_m)
+}
+```
+
+Inside [`releasem`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime1.go#L612-L619) function, the goroutine's [`stackguard0`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L405-L405) is set to [`stackPreempt`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime1.go#L617-L617) to trigger an eventual cooperative preemption.
+Control is then transferred to the [g0](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L529) system goroutine, which belongs to the same kernel thread currently running the goroutine, to invoke the [`park_m`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L4089-L4142) function.
+
+Inside `park_m`, the goroutine status is set to waiting and the association between the goroutine and the kernel thread `M` is dropped.
+Additionally, `gopark` receives an `unlockf` callback function, which is executed in `park_m`.
+If `unlockf` returns `false`, the parked goroutine is immediately made runnable again and rescheduled on the same `M` using [`execute`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L3221-L3265).
+Finally, the [`schedule`](#runtime-schedule) function is called to pick a runnable goroutine and execute it on this M.
+
+### Schedule Loop
+
+A function implemented in the Go runtime that identifies runnable goroutines and execute it.
+This function is used when a new kernel thread is created, a goroutine is parked or preempted, [`Gosched`](https://pkg.go.dev/runtime#Gosched) is called, when a goroutine finishes system call or when a goroutine returns.
+
+<!--
+https://draven.co/golang/docs/part3-runtime/ch06-concurrency/golang-goroutine/#656-%e8%a7%a6%e5%8f%91%e8%b0%83%e5%ba%a6
+-->
+
+
 ## Program Bootstrap
 
 // Mention what happens when Go program starts: how many threads are created, how many goroutines are created, how many
@@ -249,9 +286,9 @@ The Go code we write uses these functions to invoke system calls. Each function 
 [`Syscall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/syscall/syscall_linux.go#L72-L89) is typically used for operations with unpredictable durations, such as reading from a file or writing an HTTP response. Since the duration of these operations is non-deterministic, the scheduler needs to account for them to ensure efficient use of resources.
 This function contains logic to coordinate goroutines `G`, kernel threads `M`, and logical processors `P`, allowing the Go scheduler to maintain performance and responsiveness during blocking system calls.
 
-Nevertheless, not all system calls are unpredictable. For example, retrieving the process ID or getting the current time is usually quick and consistent. For these types of operations, `RawSyscall` is used.
+Nevertheless, not all system calls are unpredictable. For example, retrieving the process ID or getting the current time is usually quick and consistent. For these types of operations, [`RawSyscall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/syscall/syscall_linux.go#L54-L56) is used.
 Since no scheduling is involved, the association between `G`, `M` , and `P` remains unchanged when raw system calls are made.
-Internally, [`Syscall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/syscall/syscall_linux.go#L72-L89) delegates to `RawSyscall` to perform the actual system call, but wraps it with additional scheduling logic.
+Internally, [`Syscall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/syscall/syscall_linux.go#L72-L89) delegates to [`RawSyscall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/syscall/syscall_linux.go#L54-L56) to perform the actual system call, but wraps it with additional scheduling logic.
 
 ### Scheduling in Syscall
 
@@ -289,13 +326,13 @@ func main() {
 ```
 
 Functions like `http.ListenAndServe()` and `http.HandleFunc()` might seem deceptively simple—but under the hood, they abstract away a lot of low-level networking complexity.
-Go builds on top of fundamental [socket](https://en.wikipedia.org/wiki/Unix_domain_socket) operations (depicted in the figure below) to manage network communication between clients and servers.
+Go builds on top of fundamental [socket](https://en.wikipedia.org/wiki/Unix_domain_socket) operations (depicted in the figure below) to manage network communication.
 
 | <img src="/assets/2025-03-11-go-scheduler/socket_system_calls_in_http_server.png" width=300/> | 
 |:---------------------------------------------------------------------------------------------:| 
 |                Overview of system calls used with stream sockets<sup>[N]</sup>                |
 
-Specifically, `http.ListenAndServe()` leverages the following system calls: [`socket()`](https://man7.org/linux/man-pages/man2/socket.2.html), [`bind()`](https://man7.org/linux/man-pages/man2/bind.2.html), [`listen()`](https://man7.org/linux/man-pages/man2/listen.2.html), [`accept()`](https://man7.org/linux/man-pages/man2/accept.2.html) to create a TCP sockets, which  to create a TCP sockets, which is essentially [file descriptors](https://en.wikipedia.org/wiki/File_descriptor).
+Specifically, `http.ListenAndServe()` leverages the following system calls: [`socket()`](https://man7.org/linux/man-pages/man2/socket.2.html), [`bind()`](https://man7.org/linux/man-pages/man2/bind.2.html), [`listen()`](https://man7.org/linux/man-pages/man2/listen.2.html), [`accept()`](https://man7.org/linux/man-pages/man2/accept.2.html) to create TCP sockets, which are essentially [file descriptors](https://en.wikipedia.org/wiki/File_descriptor).
 It binds the listening socket to the specified address and port, listens for incoming connections, and creates a new connected socket to handle client requests—all without requiring you to write any socket-handling code.
 Similarly, `http.HandleFunc()` registers your handler functions, abstracting away the lower-level details like reading from and writing to the connection using system calls such as [`read()`](https://man7.org/linux/man-pages/man2/read.2.html) and [`write()`](https://man7.org/linux/man-pages/man2/write.2.html).
 
@@ -402,76 +439,12 @@ Another equally important part of the Go runtime is the garbage collector.
 - LockOSThread, UnlockOSThread
     - https://www.sobyte.net/post/2021-06/golang-number-of-threads-in-the-running-program/
 
-## Glossary
-
-### Goroutine Parking
-
-A commonly used procedure in the Go runtime for transitioning the current goroutine into a waiting state.
-It is implemented in [`gopark`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/net/fd_unix.go#L40-L42) function.
-The snippet below highlights some of its key aspects.
-
-```go
-func gopark(unlockf func(*g, unsafe.Pointer) bool, ...) {
-    ...
-    mp.waitunlockf = unlockf
-    ...
-    releasem(mp)
-    ...
-    mcall(park_m)
-}
-```
-
-Inside [`releasem`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime1.go#L612-L619) function, the goroutine's [`stackguard0`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L405-L405) is set to [`stackPreempt`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime1.go#L617-L617) to trigger an eventual cooperative preemption.
-Control is then transferred to the [g0](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L529) system goroutine, which belongs to the same kernel thread currently running the goroutine, to invoke the [`park_m`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L4089-L4142) function.
-
-Inside `park_m`, the goroutine status is set to waiting and the association between the goroutine and the kernel thread `M` is dropped.
-Additionally, `gopark` receives an `unlockf` callback function, which is executed in `park_m`.
-If `unlockf` returns `false`, the parked goroutine is immediately made runnable again and rescheduled on the same `M` using [`execute`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L3221-L3265).
-Finally, the [`schedule`](#runtime-schedule) function is called to pick a runnable goroutine and execute it on this M.
-
-### Schedule Loop
-
-A function implemented in the Go runtime that identifies runnable goroutines and execute it.
-This function is used when a new kernel thread is created, a goroutine is parked or preempted, [`Gosched`](https://pkg.go.dev/runtime#Gosched) is called, when a goroutine finishes system call or when a goroutine returns.
-
-<!--
-https://draven.co/golang/docs/part3-runtime/ch06-concurrency/golang-goroutine/#656-%e8%a7%a6%e5%8f%91%e8%b0%83%e5%ba%a6
--->
-
 ## References
 
 - unskilled.blog. [*Preemption in Go*](https://unskilled.blog/posts/preemption-in-go-an-introduction/).
 - kelche.co. [*Go Scheduling*](https://www.kelche.co/blog/go/golang-scheduling).
 - [N], [N] Michael Kerrisk. *The Linux Programming Interface*.
 - [N], [N], [N] W. Richard Stevens, Bill Fenner, Andrew M. Rudoff. *Unix Network Programming*.
-
-## Flows
-
-<!-- 
-## flow
-
-sysmon:
-P's status == _Prunning || _Psyscall -> preemptone
-P's status == _Psyscall -> set P status to _Pidle -> handoff(p) -> startm -> wake netpoller
-
-entersyscall -> reenetersycall -> save register, PC -> change G's status from _Grunning to _Gsyscall -> disassociate M from P, set P to M's oldp
-make system call
-exitsyscall -> exitsyscallfast -(inside exitsyscallfast)-> if P's status is _Psyscall, set P to M's oldp -> return true
-                                \                       \-> otherwise exitsyscallfast_pidle -(inside exitsyscallfast_pidle)-> if there is idle P -> wirep -> return true
-                                 \                       \-> return false
-                                  \-(outside exitsyscallfast)-> if returns true -> change G status to _Grunning
-                                                              \-> otherwise exitsyscall0 -(inside exitsyscall0)-> set G status from _Gsyscall to _Grunnable -> get idle P -> if there is idle P, associate P with M acquirep -> execute G
-                                                                                                                                                                        \-> otherwise enqueue G to global run queue -> put M into sleep by stopm (block until waker is called) -> mput put M into idle list -> mpark sleeps M -> woken up by scheduler -> schedule()
-
-In schedinit:
-  - initialize GOMAXPROCS number of idle P
-In newproc -> wakep -> get idle p -> if there is idle p -> startm
-                                  \-> otherwise return
-
-In startm -> if there is no idle m, newm -> newm1 -> newosproc -> clone -> mstart -> mstart1 -> schedule -> findRunnable -> if there is goroutine, execute -> gogo -> goexit -> schedule
-          \                                                                                                              \-> otherwise sleep m by stopm (block until waker is called) -> findRunnable
-           \-> otherwise wake up m
-M is not destroyed but will put into sleep by stopm (using futexes under the hood)
 
 ## sobyte posts
 - https://www.sobyte.net/post/2023-08/go-apache-arrow-parquet/
