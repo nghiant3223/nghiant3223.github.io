@@ -314,8 +314,8 @@ The bootstrap process then invokes the assembly function [`runtime·schedinit`](
 This function performs various initializations, most notably invoking [`procresize`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L5719-L5868), which sets up to [`GOMAXPROCS`](https://pkg.go.dev/runtime#GOMAXPROCS) logical processors `P` in *idle* state.
 The main thread [`M0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L117-L117) is then associated with the first processors, transitioning its state from *idle* to *running* to execute goroutines.
 
-Afterward, the main goroutine is created to run the [`runtime.main`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L146-L148) function, which serves as the Go runtime entry point.
-Within [`runtime.main`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L146-L148) function, a dedicated thread is created to launch `sysmon`, which will be described in [Non-cooperative Preemption](#non-cooperative-preemption) section.
+Afterward, the main goroutine is created to run [`runtime.main`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L146-L148) function, which serves as the Go runtime entry point.
+Within the [`runtime.main`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L146-L148) function, a dedicated thread is created to launch `sysmon`, which will be described in [Non-cooperative Preemption](#non-cooperative-preemption) section.
 Note that [`runtime.main`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L146-L148) is different from the `main` function we write; the latter appears in the runtime as [`main_main`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L134-L135).
 
 The main thread then calls [`mstart`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L1769-L1769) to begin execution on [`M0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L117-L117), starting the [schedule loop](#schedule-loop) to pick up and execute the main goroutine.
