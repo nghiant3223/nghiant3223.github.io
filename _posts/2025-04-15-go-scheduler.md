@@ -961,7 +961,7 @@ The control is then transferred to the [`g0`](https://github.com/golang/go/blob/
 Inside [`park_m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L4089-L4142), the goroutine state is set to *waiting* and the association between the goroutine and the thread `M` is dropped.
 Additionally, [`gopark`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L390-L436) receives an `unlockf` callback function, which is executed in [`park_m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L4089-L4142).
 If `unlockf` returns `false`, the parked goroutine is immediately made runnable again and rescheduled on the same thread `M` using [`execute`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3221-L3265).
-Otherwise, this thread `M` enters the [schedule loop](#schedule-loop) to pick a runnable goroutine and execute it.
+Otherwise, `M` enters the [schedule loop](#schedule-loop) to pick a goroutine and execute it.
 
 ### Start Thread: [`startm`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L2917-L3025)
 
@@ -1013,7 +1013,7 @@ flowchart LR
 
 If `P` is `nil`, it attempts to retrieve an idle processor from the global idle list.
 If no idle processor is available, the function simply returns—indicating that the maximum number of active processors is already in use and no additional thread `M` can be created or reactivated.
-If an idle processor is found (or `P` was already provided), the function either creates a new thread `M1` (if none are idle) or wakes up an existing idle one to run the processor `P`.
+If an idle processor is found (or `P` was already provided), the function either creates a new thread `M1` (if none is idle) or wakes up an existing idle one to run `P`.
 
 Once awakened, the existing thread `M` continues in the [schedule loop](#schedule-loop).
 If a new thread is created, it's done via the [`clone`](https://man7.org/linux/man-pages/man2/clone.2.html) system call, with [`mstart`](https://github.com/golang/go/blob/go1.24.0/src/runtime/os_linux.go#L186-L187) as the entry point.
@@ -1029,7 +1029,7 @@ This is achieved by [`futex`](https://linux.die.net/man/2/futex) system call, ma
 
 [`handoffp`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3026-L3096) is responsible for transferring the ownership of a processor `P` from a thread `M`s that is blocking in a system call to another thread `M1`.
 `P` will be associated with `M1` to make progress by calling [`startm`](#start-thread-startm) under certain conditions: if the global run queue is not empty, if its local run queue is not empty, if there is tracing or garbage collection work to do, or if no thread is currently handling netpoll.
-If none of these conditions are met, `P` is returned to the processor idle list.
+If none of these conditions is met, `P` is returned to the processor idle list.
 
 ## Runtime APIs
 
