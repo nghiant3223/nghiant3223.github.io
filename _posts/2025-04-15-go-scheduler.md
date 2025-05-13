@@ -834,7 +834,7 @@ Let's see how Go implements these steps.
 
 ### Creating epoll Instance and Registering Goroutine
 
-When a TCP listener [accepts](https://github.com/golang/go/blob/go1.24.0/src/net/tcpsock.go#L374-L385) a connection, it uses [`accept4`](https://man7.org/linux/man-pages/man2/accept.2.html) system call is invoked with [`SOCK_NONBLOCK`](https://man7.org/linux/man-pages/man2/socket.2.html#:~:text=of%0A%20%20%20%20%20%20%20socket()%3A-,SOCK_NONBLOCK,-Set%20the%20O_NONBLOCK) flag to set the socket's file descriptor of the socket to non-blocking mode.
+When a TCP listener [accepts](https://github.com/golang/go/blob/go1.24.0/src/net/tcpsock.go#L374-L385) a connection, [`accept4`](https://man7.org/linux/man-pages/man2/accept.2.html) system call is invoked with [`SOCK_NONBLOCK`](https://man7.org/linux/man-pages/man2/socket.2.html#:~:text=of%0A%20%20%20%20%20%20%20socket()%3A-,SOCK_NONBLOCK,-Set%20the%20O_NONBLOCK) flag to set the socket's file descriptor of the socket to non-blocking mode.
 Following this, several descriptors are created to integrate with Go runtime's netpoll.
 
 1. An instance of [`net.netFD`](https://github.com/golang/go/blob/go1.24.0/src/net/fd_posix.go#L16-L27) is created to wrap the socket’s file descriptor.

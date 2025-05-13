@@ -1211,7 +1211,7 @@ Let’s see how Go implements these steps.</p>
 
 <h3 id="creating-epoll-instance-and-registering-goroutine">Creating epoll Instance and Registering Goroutine</h3>
 
-<p>When a TCP listener <a href="https://github.com/golang/go/blob/go1.24.0/src/net/tcpsock.go#L374-L385">accepts</a> a connection, it uses <a href="https://man7.org/linux/man-pages/man2/accept.2.html"><code class="language-plaintext highlighter-rouge">accept4</code></a> system call is invoked with <a href="https://man7.org/linux/man-pages/man2/socket.2.html#:~:text=of%0A%20%20%20%20%20%20%20socket()%3A-,SOCK_NONBLOCK,-Set%20the%20O_NONBLOCK"><code class="language-plaintext highlighter-rouge">SOCK_NONBLOCK</code></a> flag to set the socket’s file descriptor of the socket to non-blocking mode.
+<p>When a TCP listener <a href="https://github.com/golang/go/blob/go1.24.0/src/net/tcpsock.go#L374-L385">accepts</a> a connection, <a href="https://man7.org/linux/man-pages/man2/accept.2.html"><code class="language-plaintext highlighter-rouge">accept4</code></a> system call is invoked with <a href="https://man7.org/linux/man-pages/man2/socket.2.html#:~:text=of%0A%20%20%20%20%20%20%20socket()%3A-,SOCK_NONBLOCK,-Set%20the%20O_NONBLOCK"><code class="language-plaintext highlighter-rouge">SOCK_NONBLOCK</code></a> flag to set the socket’s file descriptor of the socket to non-blocking mode.
 Following this, several descriptors are created to integrate with Go runtime’s netpoll.</p>
 
 <ol>
