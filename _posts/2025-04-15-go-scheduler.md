@@ -1076,6 +1076,6 @@ If all other goroutines exit, the program crashes.
 - Ian Lance Taylor. [*What is system stack?*](https://groups.google.com/g/golang-nuts/c/JCKWH8fap9o)
 - [6], [7] Michael Kerrisk. [*The Linux Programming Interface*](https://man7.org/tlpi/).
 - [8], [9], [10] W. Richard Stevens. [*Unix Network Programming*](https://www.amazon.com/UNIX-Network-Programming-Richard-Stevens/dp/0139498761).
-- zhuanlan.zhihu.com. [Golang program startup process analysis](https://zhuanlan.zhihu.com/p/436925356).
-- Madhav Jivrajani. [GopherCon 2021: Queues, Fairness, and The Go Scheduler](https://www.youtube.com/watch?v=wQpC99Xu1U4&t=2375s&ab_channel=GopherAcademy).
+- zhuanlan.zhihu.com. [*Golang program startup process analysis*](https://zhuanlan.zhihu.com/p/436925356).
+- Madhav Jivrajani. [*GopherCon 2021: Queues, Fairness, and The Go Scheduler*](https://www.youtube.com/watch?v=wQpC99Xu1U4&t=2375s&ab_channel=GopherAcademy).
 - <div><span id="ref-1"/><span id="ref-2"/><span id="ref-3"/>[1], [2], [3] Abraham Silberschatz, Peter B. Galvin, Greg Gagne. <a href="https://www.amazon.com/Operating-System-Concepts-Abraham-Silberschatz/dp/1119800366/ref=zg-te-pba_d_sccl_3_1/138-7692107-2007040"><i>Operating System Concepts.</i></a></div>
