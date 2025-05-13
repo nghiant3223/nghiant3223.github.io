@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-13T15:26:45+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about programming</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<h1 id="go-scheduler">Go Scheduler</h1>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-13T15:34:27+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about programming</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<h1 id="go-scheduler">Go Scheduler</h1>
 
 <ul>
   <li><a href="#introduction">Introduction</a></li>
@@ -13,7 +13,6 @@
   <li><a href="#goroutine-preemption">Goroutine Preemption</a></li>
   <li><a href="#handling-system-calls">Handling System Calls</a></li>
   <li><a href="#network-io-and-file-io">Network I/O and File I/O</a></li>
-  <li><a href="#io-model-in-go">I/O Model in Go</a></li>
   <li><a href="#how-netpoll-works">How netpoll Works</a></li>
   <li><a href="#garbage-collector">Garbage Collector</a></li>
   <li><a href="#scheduling-common-functions">Scheduling Common Functions</a></li>
@@ -1095,7 +1094,7 @@ When <a href="https://man7.org/linux/man-pages/man2/select.2.html"><code class="
   </tbody>
 </table>
 
-<h2 id="io-model-in-go">I/O Model in Go</h2>
+<h3 id="io-model-in-go">I/O Model in Go</h3>
 
 <p>Go uses a combination of non-blocking I/O and I/O multiplexing to handle I/O operations efficiently.
 Due to the performance limitations of <a href="https://man7.org/linux/man-pages/man2/select.2.html"><code class="language-plaintext highlighter-rouge">select</code></a> and <a href="https://man7.org/linux/man-pages/man2/poll.2.html"><code class="language-plaintext highlighter-rouge">poll</code></a>  —as explained in this <a href="https://jvns.ca/blog/2017/06/03/async-io-on-linux--select--poll--and-epoll/#why-don-t-we-use-poll-and-select">blog</a>—Go avoids them in favor of more scalable alternatives: <a href="https://man7.org/linux/man-pages/man7/epoll.7.html">epoll</a> on Linux, <a href="https://man.freebsd.org/cgi/man.cgi?kqueue">kqueue</a> on Darwin, and <a href="https://learn.microsoft.com/en-us/windows/win32/fileio/i-o-completion-ports">IOCP</a> on Windows.

@@ -18,7 +18,6 @@ date: 2025-04-15
 * [Goroutine Preemption](#goroutine-preemption)
 * [Handling System Calls](#handling-system-calls)
 * [Network I/O and File I/O](#network-io-and-file-io)
-* [I/O Model in Go](#io-model-in-go)
 * [How netpoll Works](#how-netpoll-works)
 * [Garbage Collector](#garbage-collector)
 * [Scheduling Common Functions](#scheduling-common-functions)
@@ -839,7 +838,7 @@ When [`select`](https://man7.org/linux/man-pages/man2/select.2.html) returns tha
 |:---------------------------------------------------------------------------:|
 |        I/O multiplexing model<sup><a href="#references">10</a></sup>        |
 
-## I/O Model in Go
+### I/O Model in Go
 
 Go uses a combination of non-blocking I/O and I/O multiplexing to handle I/O operations efficiently.
 Due to the performance limitations of [`select`](https://man7.org/linux/man-pages/man2/select.2.html) and [`poll`](https://man7.org/linux/man-pages/man2/poll.2.html)  —as explained in this [blog](https://jvns.ca/blog/2017/06/03/async-io-on-linux--select--poll--and-epoll/#why-don-t-we-use-poll-and-select)—Go avoids them in favor of more scalable alternatives: [epoll](https://man7.org/linux/man-pages/man7/epoll.7.html) on Linux, [kqueue](https://man.freebsd.org/cgi/man.cgi?kqueue) on Darwin, and [IOCP](https://learn.microsoft.com/en-us/windows/win32/fileio/i-o-completion-ports) on Windows.
