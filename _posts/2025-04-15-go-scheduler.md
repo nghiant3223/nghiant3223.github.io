@@ -69,7 +69,7 @@ The implementation of Go runtime can be found at [runtime](https://github.com/go
 Go runtime is written in a combination of Go and assembly code, with the assembly code primarily used for low-level operations such as dealing with registers.
 
 Upon compiling, Go compiler replaces some keywords and built-in functions with Go runtime's function calls.
-For example, the `go` keyword—used to spawn a new goroutine—is substituted with a call to [`runtime.newproc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L5014-L5030), or the `new` function—used to allocate a new object—is replaced with a call to [`runtime.newobject`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1710-L1715).
+For example, the `go` keyword—used to spawn a new goroutine—is substituted with a call to [`runtime.newproc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L5014-L5030), or the `new` function—used to allocate a new object—is replaced with a call to [`runtime.newobject`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1710-L1715).
 
 You might be surprised to learn that some functions in the Go runtime have no Go implementation at all.
 For example, functions like [`getg`](https://github.com/golang/go/blob/go1.24.0/src/runtime/stubs.go#L28-L31) are recognized by the Go compiler and replaced with low-level assembly code during compilation.
@@ -169,9 +169,9 @@ But in Go, it is specifically referred to as the GMP model as there are three ki
 
 ## GMP Model
 
-### Goroutine: [`g`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L396-L508)
+### Goroutine: [`g`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L396-L508)
 
-When the `go` keyword is followed by a function call, a new instance of [`g`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L396-L508), referred to as `G`, is created.
+When the `go` keyword is followed by a function call, a new instance of [`g`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L396-L508), referred to as `G`, is created.
 `G` is an object that represents a goroutine, containing metadata such as its execution state, stack, and a program counter pointing to the associated function.
 Executing a goroutine simply means running the function that `G` references.
 
@@ -184,23 +184,23 @@ The figure and table below described the state machine of goroutines in the GMP 
 Some states and transitions are omitted for simplicity.
 The actions that trigger state transitions will be described along the post.
 
-|                                                         State                                                          | &nbsp;&nbsp;&nbsp; Description                                       |
-|:----------------------------------------------------------------------------------------------------------------------:|----------------------------------------------------------------------|
-|   [Idle](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L36-L39)   | Has just been created, and not yet initialized                       |
-| [Runnable](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L40-L42) | Currently in run queue, and about to execute code                    |
-| [Running](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L44-L47)  | Not in a run queue, and executing code                               |
-| [Syscall](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L49-L52)  | Executing system call, and not executing code                        |
-| [Waiting](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L54-L62)  | Not executing code, and not in a run queue, e.g. waiting for channel |
-|   [Dead](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L68-L74)   | Currently in a free list, just exited, or just  beiging initialized  |
+|                                         State                                          | &nbsp;&nbsp;&nbsp; Description                                       |
+|:--------------------------------------------------------------------------------------:|----------------------------------------------------------------------|
+|   [Idle](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L36-L39)   | Has just been created, and not yet initialized                       |
+| [Runnable](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L40-L42) | Currently in run queue, and about to execute code                    |
+| [Running](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L44-L47)  | Not in a run queue, and executing code                               |
+| [Syscall](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L49-L52)  | Executing system call, and not executing code                        |
+| [Waiting](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L54-L62)  | Not executing code, and not in a run queue, e.g. waiting for channel |
+|   [Dead](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L68-L74)   | Currently in a free list, just exited, or just  beiging initialized  |
 
 | <img src="/assets/2025-03-11-go-scheduling/goroutine_state_machine.png" width=400> |
 |:----------------------------------------------------------------------------------:|
 |                      State machine of goroutines in GMP model                      |
 
-### Thread: [`m`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L528-L630)
+### Thread: [`m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L528-L630)
 
 All Go code—whether it's user code, the scheduler, or the garbage collector—runs on threads that are managed by the operating system kernel.
-In order for the Go scheduler to make threads work well in GMP model, [`m`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L528-L630) struct representing threads is introduced, and an instance of [`m`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L528-L630) is called `M`.
+In order for the Go scheduler to make threads work well in GMP model, [`m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L528-L630) struct representing threads is introduced, and an instance of [`m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L528-L630) is called `M`.
 
 `M` maintains reference to the current goroutine `G`, the current processor `P` if `M` is executing Go code, the previous processor `P` if `M` is executing system call, and the next processor `P` if `M` is about to be created.
 
@@ -233,11 +233,11 @@ The actions that trigger state transitions will be described along the post.
 |:-------------------------------------------------------------------------------:|
 |                      State machine of threads in GMP model                      |
 
-### Processor: [`p`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L632-L757)
+### Processor: [`p`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L632-L757)
 
 `p` struct conceptually represents a physical processor to execute goroutines.
 Instances of `p` are called `P`, and they are created during the program's bootstrap phase.
-While the number of threads created could be large ([10000](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L827-L827) in Go 1.24), the number of processors is usually small and determined by the [`GOMAXPROCS`](https://pkg.go.dev/runtime#GOMAXPROCS).
+While the number of threads created could be large ([10000](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L827-L827) in Go 1.24), the number of processors is usually small and determined by the [`GOMAXPROCS`](https://pkg.go.dev/runtime#GOMAXPROCS).
 There are exactly [`GOMAXPROCS`](https://pkg.go.dev/runtime#GOMAXPROCS) processors, regardless of its state.
 
 To minimize lock contention on the global run queue, each processor `P` in the Go runtime maintains a local run queue.
@@ -252,9 +252,9 @@ By array-based and fixed-size with 256 slots, it allows better cache locality an
 Fixed-size is safe for `P`'s local run queues as we also have the global run queue as a backup.
 By circular, it allows efficiently adding and removing goroutines without needing to shift elements around.
 
-Each `P` instance also maintains references to some memory management data structures such as [`mcache`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mcache.go#L13-L55) and [`pageCache`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mpagecache.go#L14-L22).
-[`mcache`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mcache.go#L13-L55) serves as the front-end in [Thread-Caching Malloc](https://google.github.io/tcmalloc/design.html) model and is used by `P` to allocate micro and small objects.
-[`pageCache`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mpagecache.go#L14-L22), on the other hand, enables the memory allocator to fetch memory pages without acquiring the [heap lock](https://www.ibm.com/docs/en/sdk-java-technology/8?topic=management-heap-allocation#the-allocator), thereby improving performance under high concurrency.
+Each `P` instance also maintains references to some memory management data structures such as [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) and [`pageCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagecache.go#L14-L22).
+[`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) serves as the front-end in [Thread-Caching Malloc](https://google.github.io/tcmalloc/design.html) model and is used by `P` to allocate micro and small objects.
+[`pageCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagecache.go#L14-L22), on the other hand, enables the memory allocator to fetch memory pages without acquiring the [heap lock](https://www.ibm.com/docs/en/sdk-java-technology/8?topic=management-heap-allocation#the-allocator), thereby improving performance under high concurrency.
 
 In order for a Go program to work well with [sleeps](https://pkg.go.dev/time#Sleep), [timeouts](https://pkg.go.dev/time#After) or [intervals](https://pkg.go.dev/time#Tick), `P` also manages timers implemented by [min-heap](https://en.wikipedia.org/wiki/Heap_(data_structure)) data structure.
 When looking for a runnable goroutine, `P` also checks if there are any timers that have expired.
@@ -264,13 +264,13 @@ The figure and table below described the state machine of processors in the GMP 
 Some states and transitions are omitted for simplicity.
 The actions that trigger state transitions will be described along the post.
 
-|                                                          State                                                          | &nbsp;&nbsp;&nbsp; Description                                                                         |
-|:-----------------------------------------------------------------------------------------------------------------------:|--------------------------------------------------------------------------------------------------------|
-|  [Idle](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L113-L120)   | Not executing Go runtime code or user Go code                                                          |
-| [Running](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L122-L129) | Associated with a `M` that is executing user Go code                                                   |
-| [Syscall](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L131-L141) | Associated with a `M` that is executing system call                                                    |
-| [GCStop](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L143-L151)  | Associated with a `M` that is stopped-the-world for garbage collection                                 |
-|  [Dead](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L153-L157)   | No longer in-used, waiting to be reused when [GOMAXPROCS](https://pkg.go.dev/runtime#GOMAXPROCS) grows |
+|                                          State                                          | &nbsp;&nbsp;&nbsp; Description                                                                         |
+|:---------------------------------------------------------------------------------------:|--------------------------------------------------------------------------------------------------------|
+|  [Idle](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L113-L120)   | Not executing Go runtime code or user Go code                                                          |
+| [Running](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L122-L129) | Associated with a `M` that is executing user Go code                                                   |
+| [Syscall](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L131-L141) | Associated with a `M` that is executing system call                                                    |
+| [GCStop](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L143-L151)  | Associated with a `M` that is stopped-the-world for garbage collection                                 |
+|  [Dead](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L153-L157)   | No longer in-used, waiting to be reused when [GOMAXPROCS](https://pkg.go.dev/runtime#GOMAXPROCS) grows |
 
 | <img src="/assets/2025-03-11-go-scheduling/processor_state_machine.png" width=500> |
 |:----------------------------------------------------------------------------------:|
@@ -460,7 +460,7 @@ On the last attempt, it first tries to steal from `P1`'s `runnext` slot—if ava
 Note that [`findRunnable`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3267-L3646) not only finds a runnable goroutine but also wakes up goroutine that went into sleep before step 1 happens.
 Once the goroutine wakes up, it'll be put into the local run queue of the processor `P` that was executing it, waiting to be picked up and executed by some thread `M`.
 
-If no goroutine is found after step 9, the thread `M` waits on `netpoll` until the nearest [timer](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/time.go#L35-L107) expires—such as when a goroutine wakes up from sleep (since sleeping in Go internally creates a timer).
+If no goroutine is found after step 9, the thread `M` waits on `netpoll` until the nearest [timer](https://github.com/golang/go/blob/go1.24.0/src/runtime/time.go#L35-L107) expires—such as when a goroutine wakes up from sleep (since sleeping in Go internally creates a timer).
 Why is `netpoll` involved with timers? This is because Go's timer system heavily relies on `netpoll`, as noted in [this](https://github.com/golang/go/blob/go1.24.0/src/runtime/time.go#L427-L427) code comment.
 After `netpoll` returns, `M` re-enters the [schedule loop](#schedule-loop) to search for a runnable goroutine again.
 
@@ -482,7 +482,7 @@ func main() {
 }
 ```
 
-If `P` has no [timer](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/time.go#L35-L107), its corresponding thread `M` will go idle.
+If `P` has no [timer](https://github.com/golang/go/blob/go1.24.0/src/runtime/time.go#L35-L107), its corresponding thread `M` will go idle.
 `P` is placed into idle list, `M` goes to sleep by calling the [`stopm`](#stop-thread-stopm) function.
 It remains asleep until another `M1` thread  wakes it up, typically upon the creation of a new goroutine, as explained in [Waking Up Processor](#waking-up-processor).
 Once awakened, `M` reenters the [schedule loop](#schedule-loop) to search for and execute a runnable goroutine.

@@ -190,7 +190,7 @@ The implementation of Go runtime can be found at <a href="https://github.com/gol
 Go runtime is written in a combination of Go and assembly code, with the assembly code primarily used for low-level operations such as dealing with registers.</p>
 
 <p>Upon compiling, Go compiler replaces some keywords and built-in functions with Go runtime’s function calls.
-For example, the <code class="language-plaintext highlighter-rouge">go</code> keyword—used to spawn a new goroutine—is substituted with a call to <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L5014-L5030"><code class="language-plaintext highlighter-rouge">runtime.newproc</code></a>, or the <code class="language-plaintext highlighter-rouge">new</code> function—used to allocate a new object—is replaced with a call to <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1710-L1715"><code class="language-plaintext highlighter-rouge">runtime.newobject</code></a>.</p>
+For example, the <code class="language-plaintext highlighter-rouge">go</code> keyword—used to spawn a new goroutine—is substituted with a call to <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L5014-L5030"><code class="language-plaintext highlighter-rouge">runtime.newproc</code></a>, or the <code class="language-plaintext highlighter-rouge">new</code> function—used to allocate a new object—is replaced with a call to <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1710-L1715"><code class="language-plaintext highlighter-rouge">runtime.newobject</code></a>.</p>
 
 <p>You might be surprised to learn that some functions in the Go runtime have no Go implementation at all.
 For example, functions like <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/stubs.go#L28-L31"><code class="language-plaintext highlighter-rouge">getg</code></a> are recognized by the Go compiler and replaced with low-level assembly code during compilation.
@@ -332,9 +332,9 @@ But in Go, it is specifically referred to as the GMP model as there are three ki
 
 <h2 id="gmp-model">GMP Model</h2>
 
-<h3 id="goroutine-g">Goroutine: <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L396-L508"><code class="language-plaintext highlighter-rouge">g</code></a></h3>
+<h3 id="goroutine-g">Goroutine: <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L396-L508"><code class="language-plaintext highlighter-rouge">g</code></a></h3>
 
-<p>When the <code class="language-plaintext highlighter-rouge">go</code> keyword is followed by a function call, a new instance of <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L396-L508"><code class="language-plaintext highlighter-rouge">g</code></a>, referred to as <code class="language-plaintext highlighter-rouge">G</code>, is created.
+<p>When the <code class="language-plaintext highlighter-rouge">go</code> keyword is followed by a function call, a new instance of <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L396-L508"><code class="language-plaintext highlighter-rouge">g</code></a>, referred to as <code class="language-plaintext highlighter-rouge">G</code>, is created.
 <code class="language-plaintext highlighter-rouge">G</code> is an object that represents a goroutine, containing metadata such as its execution state, stack, and a program counter pointing to the associated function.
 Executing a goroutine simply means running the function that <code class="language-plaintext highlighter-rouge">G</code> references.</p>
 
@@ -356,27 +356,27 @@ The actions that trigger state transitions will be described along the post.</p>
   </thead>
   <tbody>
     <tr>
-      <td style="text-align: center"><a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L36-L39">Idle</a></td>
+      <td style="text-align: center"><a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L36-L39">Idle</a></td>
       <td>Has just been created, and not yet initialized</td>
     </tr>
     <tr>
-      <td style="text-align: center"><a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L40-L42">Runnable</a></td>
+      <td style="text-align: center"><a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L40-L42">Runnable</a></td>
       <td>Currently in run queue, and about to execute code</td>
     </tr>
     <tr>
-      <td style="text-align: center"><a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L44-L47">Running</a></td>
+      <td style="text-align: center"><a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L44-L47">Running</a></td>
       <td>Not in a run queue, and executing code</td>
     </tr>
     <tr>
-      <td style="text-align: center"><a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L49-L52">Syscall</a></td>
+      <td style="text-align: center"><a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L49-L52">Syscall</a></td>
       <td>Executing system call, and not executing code</td>
     </tr>
     <tr>
-      <td style="text-align: center"><a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L54-L62">Waiting</a></td>
+      <td style="text-align: center"><a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L54-L62">Waiting</a></td>
       <td>Not executing code, and not in a run queue, e.g. waiting for channel</td>
     </tr>
     <tr>
-      <td style="text-align: center"><a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L68-L74">Dead</a></td>
+      <td style="text-align: center"><a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L68-L74">Dead</a></td>
       <td>Currently in a free list, just exited, or just  beiging initialized</td>
     </tr>
   </tbody>
@@ -395,10 +395,10 @@ The actions that trigger state transitions will be described along the post.</p>
   </tbody>
 </table>
 
-<h3 id="thread-m">Thread: <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L528-L630"><code class="language-plaintext highlighter-rouge">m</code></a></h3>
+<h3 id="thread-m">Thread: <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L528-L630"><code class="language-plaintext highlighter-rouge">m</code></a></h3>
 
 <p>All Go code—whether it’s user code, the scheduler, or the garbage collector—runs on threads that are managed by the operating system kernel.
-In order for the Go scheduler to make threads work well in GMP model, <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L528-L630"><code class="language-plaintext highlighter-rouge">m</code></a> struct representing threads is introduced, and an instance of <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L528-L630"><code class="language-plaintext highlighter-rouge">m</code></a> is called <code class="language-plaintext highlighter-rouge">M</code>.</p>
+In order for the Go scheduler to make threads work well in GMP model, <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L528-L630"><code class="language-plaintext highlighter-rouge">m</code></a> struct representing threads is introduced, and an instance of <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L528-L630"><code class="language-plaintext highlighter-rouge">m</code></a> is called <code class="language-plaintext highlighter-rouge">M</code>.</p>
 
 <p><code class="language-plaintext highlighter-rouge">M</code> maintains reference to the current goroutine <code class="language-plaintext highlighter-rouge">G</code>, the current processor <code class="language-plaintext highlighter-rouge">P</code> if <code class="language-plaintext highlighter-rouge">M</code> is executing Go code, the previous processor <code class="language-plaintext highlighter-rouge">P</code> if <code class="language-plaintext highlighter-rouge">M</code> is executing system call, and the next processor <code class="language-plaintext highlighter-rouge">P</code> if <code class="language-plaintext highlighter-rouge">M</code> is about to be created.</p>
 
@@ -460,11 +460,11 @@ The actions that trigger state transitions will be described along the post.</p>
   </tbody>
 </table>
 
-<h3 id="processor-p">Processor: <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L632-L757"><code class="language-plaintext highlighter-rouge">p</code></a></h3>
+<h3 id="processor-p">Processor: <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L632-L757"><code class="language-plaintext highlighter-rouge">p</code></a></h3>
 
 <p><code class="language-plaintext highlighter-rouge">p</code> struct conceptually represents a physical processor to execute goroutines.
 Instances of <code class="language-plaintext highlighter-rouge">p</code> are called <code class="language-plaintext highlighter-rouge">P</code>, and they are created during the program’s bootstrap phase.
-While the number of threads created could be large (<a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L827-L827">10000</a> in Go 1.24), the number of processors is usually small and determined by the <a href="https://pkg.go.dev/runtime#GOMAXPROCS"><code class="language-plaintext highlighter-rouge">GOMAXPROCS</code></a>.
+While the number of threads created could be large (<a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L827-L827">10000</a> in Go 1.24), the number of processors is usually small and determined by the <a href="https://pkg.go.dev/runtime#GOMAXPROCS"><code class="language-plaintext highlighter-rouge">GOMAXPROCS</code></a>.
 There are exactly <a href="https://pkg.go.dev/runtime#GOMAXPROCS"><code class="language-plaintext highlighter-rouge">GOMAXPROCS</code></a> processors, regardless of its state.</p>
 
 <p>To minimize lock contention on the global run queue, each processor <code class="language-plaintext highlighter-rouge">P</code> in the Go runtime maintains a local run queue.
@@ -479,9 +479,9 @@ By array-based and fixed-size with 256 slots, it allows better cache locality an
 Fixed-size is safe for <code class="language-plaintext highlighter-rouge">P</code>’s local run queues as we also have the global run queue as a backup.
 By circular, it allows efficiently adding and removing goroutines without needing to shift elements around.</p>
 
-<p>Each <code class="language-plaintext highlighter-rouge">P</code> instance also maintains references to some memory management data structures such as <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mcache.go#L13-L55"><code class="language-plaintext highlighter-rouge">mcache</code></a> and <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mpagecache.go#L14-L22"><code class="language-plaintext highlighter-rouge">pageCache</code></a>.
-<a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mcache.go#L13-L55"><code class="language-plaintext highlighter-rouge">mcache</code></a> serves as the front-end in <a href="https://google.github.io/tcmalloc/design.html">Thread-Caching Malloc</a> model and is used by <code class="language-plaintext highlighter-rouge">P</code> to allocate micro and small objects.
-<a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mpagecache.go#L14-L22"><code class="language-plaintext highlighter-rouge">pageCache</code></a>, on the other hand, enables the memory allocator to fetch memory pages without acquiring the <a href="https://www.ibm.com/docs/en/sdk-java-technology/8?topic=management-heap-allocation#the-allocator">heap lock</a>, thereby improving performance under high concurrency.</p>
+<p>Each <code class="language-plaintext highlighter-rouge">P</code> instance also maintains references to some memory management data structures such as <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55"><code class="language-plaintext highlighter-rouge">mcache</code></a> and <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagecache.go#L14-L22"><code class="language-plaintext highlighter-rouge">pageCache</code></a>.
+<a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55"><code class="language-plaintext highlighter-rouge">mcache</code></a> serves as the front-end in <a href="https://google.github.io/tcmalloc/design.html">Thread-Caching Malloc</a> model and is used by <code class="language-plaintext highlighter-rouge">P</code> to allocate micro and small objects.
+<a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagecache.go#L14-L22"><code class="language-plaintext highlighter-rouge">pageCache</code></a>, on the other hand, enables the memory allocator to fetch memory pages without acquiring the <a href="https://www.ibm.com/docs/en/sdk-java-technology/8?topic=management-heap-allocation#the-allocator">heap lock</a>, thereby improving performance under high concurrency.</p>
 
 <p>In order for a Go program to work well with <a href="https://pkg.go.dev/time#Sleep">sleeps</a>, <a href="https://pkg.go.dev/time#After">timeouts</a> or <a href="https://pkg.go.dev/time#Tick">intervals</a>, <code class="language-plaintext highlighter-rouge">P</code> also manages timers implemented by <a href="https://en.wikipedia.org/wiki/Heap_(data_structure)">min-heap</a> data structure.
 When looking for a runnable goroutine, <code class="language-plaintext highlighter-rouge">P</code> also checks if there are any timers that have expired.
@@ -500,23 +500,23 @@ The actions that trigger state transitions will be described along the post.</p>
   </thead>
   <tbody>
     <tr>
-      <td style="text-align: center"><a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L113-L120">Idle</a></td>
+      <td style="text-align: center"><a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L113-L120">Idle</a></td>
       <td>Not executing Go runtime code or user Go code</td>
     </tr>
     <tr>
-      <td style="text-align: center"><a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L122-L129">Running</a></td>
+      <td style="text-align: center"><a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L122-L129">Running</a></td>
       <td>Associated with a <code class="language-plaintext highlighter-rouge">M</code> that is executing user Go code</td>
     </tr>
     <tr>
-      <td style="text-align: center"><a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L131-L141">Syscall</a></td>
+      <td style="text-align: center"><a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L131-L141">Syscall</a></td>
       <td>Associated with a <code class="language-plaintext highlighter-rouge">M</code> that is executing system call</td>
     </tr>
     <tr>
-      <td style="text-align: center"><a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L143-L151">GCStop</a></td>
+      <td style="text-align: center"><a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L143-L151">GCStop</a></td>
       <td>Associated with a <code class="language-plaintext highlighter-rouge">M</code> that is stopped-the-world for garbage collection</td>
     </tr>
     <tr>
-      <td style="text-align: center"><a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L153-L157">Dead</a></td>
+      <td style="text-align: center"><a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L153-L157">Dead</a></td>
       <td>No longer in-used, waiting to be reused when <a href="https://pkg.go.dev/runtime#GOMAXPROCS">GOMAXPROCS</a> grows</td>
     </tr>
   </tbody>
@@ -739,7 +739,7 @@ On the last attempt, it first tries to steal from <code class="language-plaintex
 <p>Note that <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3267-L3646"><code class="language-plaintext highlighter-rouge">findRunnable</code></a> not only finds a runnable goroutine but also wakes up goroutine that went into sleep before step 1 happens.
 Once the goroutine wakes up, it’ll be put into the local run queue of the processor <code class="language-plaintext highlighter-rouge">P</code> that was executing it, waiting to be picked up and executed by some thread <code class="language-plaintext highlighter-rouge">M</code>.</p>
 
-<p>If no goroutine is found after step 9, the thread <code class="language-plaintext highlighter-rouge">M</code> waits on <code class="language-plaintext highlighter-rouge">netpoll</code> until the nearest <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/time.go#L35-L107">timer</a> expires—such as when a goroutine wakes up from sleep (since sleeping in Go internally creates a timer).
+<p>If no goroutine is found after step 9, the thread <code class="language-plaintext highlighter-rouge">M</code> waits on <code class="language-plaintext highlighter-rouge">netpoll</code> until the nearest <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/time.go#L35-L107">timer</a> expires—such as when a goroutine wakes up from sleep (since sleeping in Go internally creates a timer).
 Why is <code class="language-plaintext highlighter-rouge">netpoll</code> involved with timers? This is because Go’s timer system heavily relies on <code class="language-plaintext highlighter-rouge">netpoll</code>, as noted in <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/time.go#L427-L427">this</a> code comment.
 After <code class="language-plaintext highlighter-rouge">netpoll</code> returns, <code class="language-plaintext highlighter-rouge">M</code> re-enters the <a href="#schedule-loop">schedule loop</a> to search for a runnable goroutine again.</p>
 
@@ -760,7 +760,7 @@ Let’s see how it works in another post 😄.</p>
 <span class="p">}</span>
 </code></pre></div></div>
 
-<p>If <code class="language-plaintext highlighter-rouge">P</code> has no <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/time.go#L35-L107">timer</a>, its corresponding thread <code class="language-plaintext highlighter-rouge">M</code> will go idle.
+<p>If <code class="language-plaintext highlighter-rouge">P</code> has no <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/time.go#L35-L107">timer</a>, its corresponding thread <code class="language-plaintext highlighter-rouge">M</code> will go idle.
 <code class="language-plaintext highlighter-rouge">P</code> is placed into idle list, <code class="language-plaintext highlighter-rouge">M</code> goes to sleep by calling the <a href="#stop-thread-stopm"><code class="language-plaintext highlighter-rouge">stopm</code></a> function.
 It remains asleep until another <code class="language-plaintext highlighter-rouge">M1</code> thread  wakes it up, typically upon the creation of a new goroutine, as explained in <a href="#waking-up-processor">Waking Up Processor</a>.
 Once awakened, <code class="language-plaintext highlighter-rouge">M</code> reenters the <a href="#schedule-loop">schedule loop</a> to search for and execute a runnable goroutine.</p>
