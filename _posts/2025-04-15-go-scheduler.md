@@ -6,6 +6,24 @@ date: 2025-04-15
 
 # Go Scheduler
 
+* [Introduction](#introduction)
+* [Compilation and Go Runtime](#compilation-and-go-runtime)
+* [Primitive Scheduler](#primitive-scheduler)
+* [Scheduler Enhancement](#scheduler-enhancement)
+* [GMP Model](#gmp-model)
+* [Program Bootstrap](#program-bootstrap)
+* [Creating Goroutine](#creating-goroutine)
+* [Schedule Loop](#schedule-loop)
+* [Finding a Runnable Goroutine](#finding-a-runnable-goroutine)
+* [Goroutine Preemption](#goroutine-preemption)
+* [Handling System Calls](#handling-system-calls)
+* [Network I/O and File I/O](#network-io-and-file-io)
+* [I/O Model in Go](#io-model-in-go)
+* [How netpoll Works](#how-netpoll-works)
+* [Garbage Collector](#garbage-collector)
+* [Scheduling Common Functions](#scheduling-common-functions)
+* [Runtime APIs](#runtime-apis)
+
 ## Disclaimer
 
 This blog post primarily focuses on [Go 1.24](https://tip.golang.org/doc/go1.24) programming language for [Linux](https://en.wikipedia.org/wiki/Linux) on [ARM](https://en.wikipedia.org/wiki/ARM_architecture_family) architecture.
@@ -16,7 +34,7 @@ Feel free to correct me or give suggestions in the comment section 😄.
 
 ## Introduction
 
-> This post assumes that you already have a basic understanding of Go concurrency (goroutines, channels, etc.).
+> ⚠️ This post assumes that you already have a basic understanding of Go concurrency (goroutines, channels, etc.).
 > If you're new to these concepts, consider reviewing them before continuing.
 
 Go, introduced in 2009, has steadily grown in popularity as a programming language for building concurrent applications.

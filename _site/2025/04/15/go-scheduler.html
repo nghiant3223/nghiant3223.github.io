@@ -123,6 +123,26 @@
 
 <h1 id="go-scheduler">Go Scheduler</h1>
 
+<ul>
+  <li><a href="#introduction">Introduction</a></li>
+  <li><a href="#compilation-and-go-runtime">Compilation and Go Runtime</a></li>
+  <li><a href="#primitive-scheduler">Primitive Scheduler</a></li>
+  <li><a href="#scheduler-enhancement">Scheduler Enhancement</a></li>
+  <li><a href="#gmp-model">GMP Model</a></li>
+  <li><a href="#program-bootstrap">Program Bootstrap</a></li>
+  <li><a href="#creating-goroutine">Creating Goroutine</a></li>
+  <li><a href="#schedule-loop">Schedule Loop</a></li>
+  <li><a href="#finding-a-runnable-goroutine">Finding a Runnable Goroutine</a></li>
+  <li><a href="#goroutine-preemption">Goroutine Preemption</a></li>
+  <li><a href="#handling-system-calls">Handling System Calls</a></li>
+  <li><a href="#network-io-and-file-io">Network I/O and File I/O</a></li>
+  <li><a href="#io-model-in-go">I/O Model in Go</a></li>
+  <li><a href="#how-netpoll-works">How netpoll Works</a></li>
+  <li><a href="#garbage-collector">Garbage Collector</a></li>
+  <li><a href="#scheduling-common-functions">Scheduling Common Functions</a></li>
+  <li><a href="#runtime-apis">Runtime APIs</a></li>
+</ul>
+
 <h2 id="disclaimer">Disclaimer</h2>
 
 <p>This blog post primarily focuses on <a href="https://tip.golang.org/doc/go1.24">Go 1.24</a> programming language for <a href="https://en.wikipedia.org/wiki/Linux">Linux</a> on <a href="https://en.wikipedia.org/wiki/ARM_architecture_family">ARM</a> architecture.
@@ -134,7 +154,7 @@ Feel free to correct me or give suggestions in the comment section 😄.</p>
 <h2 id="introduction">Introduction</h2>
 
 <blockquote>
-  <p>This post assumes that you already have a basic understanding of Go concurrency (goroutines, channels, etc.).
+  <p>⚠️ This post assumes that you already have a basic understanding of Go concurrency (goroutines, channels, etc.).
 If you’re new to these concepts, consider reviewing them before continuing.</p>
 </blockquote>
 
