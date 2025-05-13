@@ -620,7 +620,7 @@ That's why goroutines can actually run beyond the time limit 10ms, like goroutin
 ### Cooperative Preemption in Early Go
 
 In the early days of Go, Go runtime itself was not able to preempt a goroutines that have tight loop like the example above.
-We, the programmers, had to tell the goroutine to cooperatively give up the processor `P` by calling [`runtime.Gosched()`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L358-L365) in the loop body.
+We, as Go programmers, had to tell goroutines to cooperatively give up its processor `P` by making a call to [`runtime.Gosched()`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L358-L365) in the loop body.
 There was a Stackoverflow [question](https://stackoverflow.com/questions/13107958/what-exactly-does-runtime-gosched-do) that described an example and the behavior of [`runtime.Gosched()`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L358-L365).
 
 From the programmer's point of view, this is very tedious and error-prone, and it did have some performance [issue](https://github.com/golang/go/issues/12553) in actuality.
