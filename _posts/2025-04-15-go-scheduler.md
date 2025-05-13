@@ -82,8 +82,8 @@ linker ==> |Executable binary file|_end(((End)))
     </tbody>
 </table>
 
-Go runtime is the core of the Go programming language, providing essential functionalities such as scheduling, memory managements, and data structures.
 To understand Go scheduler, you have to understand Go runtime first.
+Go runtime is the core of the Go programming language, providing essential functionalities such as scheduling, memory managements, and data structures.
 It's nothing but a collection of functions and data structures make Go programs work.
 The implementation of Go runtime can be found in [runtime](https://github.com/golang/go/tree/go1.24.0/src/runtime) package.
 Go runtime is written in a combination of Go and assembly code, with the assembly code primarily used for low-level operations such as dealing with registers.
