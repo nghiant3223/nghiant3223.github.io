@@ -591,7 +591,7 @@ That is reason for the appearance of `runtime.asyncPreempt:47` in the visualizat
 In [`asyncPreempt2`](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt.go#L302-L311), the goroutine `g0` of thread `M` will enter [`gopreempt_m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L4191-L4193) to disassociate goroutine `G` from `M` and enqueue `G` into the global run queue.
 The thread then continues with the [schedule loop](#schedule-loop), finding another runnable goroutine and execute it.
 
-As preemption signal is triggered by `sigmon` but the actual preemption doesn't happen until the thread receives preemption signal, this kind of preemption is asynchronous.
+As preemption signal is triggered by `sysmon` but the actual preemption doesn't happen until the thread receives preemption signal, this kind of preemption is asynchronous.
 That's why goroutines can actually run beyond the time limit 10ms, like goroutine G9 in the example.
 
 | <img src="/assets/2025-03-11-go-scheduling/non_cooperative_preemption.png" width=600 /> | 
