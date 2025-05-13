@@ -443,7 +443,7 @@ That's how the process can exit and the reason why the main goroutine doesn't wa
 It is the thread `M`'s responsibility to find a suitable runnable goroutine so that goroutine starvation can be minimized.
 This logic is implemented in the [`findRunnable`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3267-L3646), which is called by the [schedule loop](#schedule-loop).
 
-The thread `M` looks for a runnable goroutine the following order, stop the chain if it finds one:
+The thread `M` looks for a runnable goroutine the following order, stopping the chain if it finds one:
 1. Check [trace reader](https://go.dev/blog/execution-traces-2024#trace-reader-api) goroutine's availability (used in [Non-cooperative Preemption](#non-cooperative-preemption) section).
 2. Check garbage collection worker goroutine's availability (described in [Garbage Collector](#garbage-collector) section).
 3. 1/61 of the time, check the global run queue.
@@ -740,10 +740,10 @@ This association are created at compile time.
 
 Before an actual system call is made, Go runtime records that the invoking goroutine is no longer using the CPU.
 The goroutine `G` transitions from *running* state to *syscall* state, and its stack pointer, program counter, and frame pointer are saved for later restoration.
-The association between thread `M` and processor `P` is temporarily detached, and `P` transitions to *syscall* state.
+The association between thread `M` and processor `P` is then temporarily detached, and `P` transitions to *syscall* state.
 This logic is implemented in the [`runtime.reentersyscall`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L4413-L4510), which is invoked by [`runtime.entersyscall`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L4512-L4532).
 
-Interestingly, the `sysmon` (as mentioned in the [Non-cooperative Preemption](#non-cooperative-preemption) section) monitors not only processors running goroutine code (where `P` is in *running* state), but also those making system calls (where `P` is in *syscall* state).
+Interestingly, the `sysmon` (mentioned in the [Non-cooperative Preemption](#non-cooperative-preemption) section) monitors not only processors running goroutine code (where `P` is in *running* state), but also those making system calls (where `P` is in *syscall* state).
 If a `P` remains in *syscall* state for more than 10ms, instead of non-cooperatively preempting the running goroutine, a [processor handoff](#processor-handoff-handoffp) takes place.
 This keeps the association between goroutine `G` and thread `M`, and attaches another  thread `M1` to this `P`, allowing runnable goroutines to run on that `M1` thread.
 Apparently, as `P` is now executing code, its status is running rather than syscall as before.
@@ -773,7 +773,7 @@ Before the fast path exits, `G` transition from *syscall* state to *running* sta
 
 
 In the slow path, the scheduler tries retrieving any idle processor `P` once again.
-If found, the goroutine `G` is scheduled to run on that `P`.
+If it's found, the goroutine `G` is scheduled to run on that `P`.
 Otherwise, `G` is enqueued into the global run queue and the associated thread `M` is stopped by [`stopm`](#stop-thread-stopm) function, waiting to be woken up to continue the [schedule loop](#schedule-loop).
 
 ## Network I/O and File I/O
@@ -801,15 +801,15 @@ func main() {
 ```
 
 Functions like `http.ListenAndServe()` and `http.HandleFunc()` might seem deceptively simple—but under the hood, they abstract away a lot of low-level networking complexity.
-Go relies on fundamental [socket](https://en.wikipedia.org/wiki/Unix_domain_socket) operations (depicted in the figure below) to manage network communication.
+Go relies on many fundamental [socket](https://en.wikipedia.org/wiki/Unix_domain_socket) operations (depicted in the figure below) to manage network communication.
 
 | <img src="/assets/2025-03-11-go-scheduling/socket_system_calls_in_http_server.png" width=300/> | 
 |:----------------------------------------------------------------------------------------------:| 
 |    Overview of system calls used with stream sockets<sup><a href="#references">7</a></sup>     |
 
-Specifically, `http.ListenAndServe()` leverages the following system calls: [`socket()`](https://man7.org/linux/man-pages/man2/socket.2.html), [`bind()`](https://man7.org/linux/man-pages/man2/bind.2.html), [`listen()`](https://man7.org/linux/man-pages/man2/listen.2.html), [`accept()`](https://man7.org/linux/man-pages/man2/accept.2.html) to create TCP sockets, which are essentially [file descriptors](https://en.wikipedia.org/wiki/File_descriptor).
-It binds the listening socket to the specified address and port, listens for incoming connections, and creates a new connected socket to handle client requests.
-This is achieved without requiring you to write any socket-handling code.
+Specifically, `http.ListenAndServe()` leverages [`socket()`](https://man7.org/linux/man-pages/man2/socket.2.html), [`bind()`](https://man7.org/linux/man-pages/man2/bind.2.html), [`listen()`](https://man7.org/linux/man-pages/man2/listen.2.html), [`accept()`](https://man7.org/linux/man-pages/man2/accept.2.html) system calls to create TCP sockets, which are essentially [file descriptors](https://en.wikipedia.org/wiki/File_descriptor).
+It binds the TCP listening socket to the specified address and port, listens for incoming connections, and creates a new connected socket to handle client requests.
+This is achieved without requiring you to write socket-handling code.
 Similarly, `http.HandleFunc()` registers your handler functions, abstracting away the lower-level details like using [`read()`](https://man7.org/linux/man-pages/man2/read.2.html) system call to read data, and [`write()`](https://man7.org/linux/man-pages/man2/write.2.html) system call to write data to the network socket.
 
 | <img src="/assets/2025-03-11-go-scheduling/go_http_server_meme.jpg" width=300/> | 
@@ -956,7 +956,7 @@ That's because upon compiling, the compiler rewrites calls to this function into
 
 But when is the current goroutine stored in thread-local storage so it can be retrieved later?
 This happens during a goroutine context switch in the [`gogo`](https://github.com/golang/go/blob/go1.24.0/src/runtime/asm_amd64.s#L411-L413) function, which is called by [`execute`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3221-L3265).
-It also occurs when a signal handler is invoked, in the [`sigtrampgo`](https://github.com/golang/go/blob/go1.24.0/src/runtime/signal_unix.go#L420-L495) function.
+It also takes place when a signal handler is invoked, in the [`sigtrampgo`](https://github.com/golang/go/blob/go1.24.0/src/runtime/signal_unix.go#L420-L495) function.
 
 ### Goroutine Parking: [`gopark`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L390-L436)
 
@@ -1047,7 +1047,7 @@ This is achieved by [`futex`](https://linux.die.net/man/2/futex) system call, ma
 ### Processor Handoff: [`handoffp`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3026-L3096)
 
 [`handoffp`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3026-L3096) is responsible for transferring the ownership of a processor `P` from a thread `M`s that is blocking in a system call to another thread `M1`.
-`P` will be associated with `M1` to make progress by calling [`startm`](#start-thread-startm) under certain conditions: if the global run queue is not empty, if its local run queue is not empty, if there is tracing or garbage collection work to do, or if no thread is currently handling netpoll.
+`P` will be associated with `M1` to make progress by calling [`startm`](#start-thread-startm) under certain conditions: if the global run queue is not empty, if its local run queue is not empty, if there is tracing work or garbage collection work to do, or if no thread is currently handling netpoll.
 If none of these conditions is met, `P` is returned to the processor idle list.
 
 ## Runtime APIs

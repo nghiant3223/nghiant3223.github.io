@@ -118,6 +118,10 @@
     #scrollTop:hover {
         background-color: #555;
     }
+
+    .footer-col-3 {
+        text-align: right !important;
+    }
 </style>
 
 <script>
@@ -743,7 +747,7 @@ That’s how the process can exit and the reason why the main goroutine doesn’
 <p>It is the thread <code class="language-plaintext highlighter-rouge">M</code>’s responsibility to find a suitable runnable goroutine so that goroutine starvation can be minimized.
 This logic is implemented in the <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3267-L3646"><code class="language-plaintext highlighter-rouge">findRunnable</code></a>, which is called by the <a href="#schedule-loop">schedule loop</a>.</p>
 
-<p>The thread <code class="language-plaintext highlighter-rouge">M</code> looks for a runnable goroutine the following order, stop the chain if it finds one:</p>
+<p>The thread <code class="language-plaintext highlighter-rouge">M</code> looks for a runnable goroutine the following order, stopping the chain if it finds one:</p>
 <ol>
   <li>Check <a href="https://go.dev/blog/execution-traces-2024#trace-reader-api">trace reader</a> goroutine’s availability (used in <a href="#non-cooperative-preemption">Non-cooperative Preemption</a> section).</li>
   <li>Check garbage collection worker goroutine’s availability (described in <a href="#garbage-collector">Garbage Collector</a> section).</li>
@@ -1093,10 +1097,10 @@ This association are created at compile time.</p>
 
 <p>Before an actual system call is made, Go runtime records that the invoking goroutine is no longer using the CPU.
 The goroutine <code class="language-plaintext highlighter-rouge">G</code> transitions from <em>running</em> state to <em>syscall</em> state, and its stack pointer, program counter, and frame pointer are saved for later restoration.
-The association between thread <code class="language-plaintext highlighter-rouge">M</code> and processor <code class="language-plaintext highlighter-rouge">P</code> is temporarily detached, and <code class="language-plaintext highlighter-rouge">P</code> transitions to <em>syscall</em> state.
+The association between thread <code class="language-plaintext highlighter-rouge">M</code> and processor <code class="language-plaintext highlighter-rouge">P</code> is then temporarily detached, and <code class="language-plaintext highlighter-rouge">P</code> transitions to <em>syscall</em> state.
 This logic is implemented in the <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L4413-L4510"><code class="language-plaintext highlighter-rouge">runtime.reentersyscall</code></a>, which is invoked by <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L4512-L4532"><code class="language-plaintext highlighter-rouge">runtime.entersyscall</code></a>.</p>
 
-<p>Interestingly, the <code class="language-plaintext highlighter-rouge">sysmon</code> (as mentioned in the <a href="#non-cooperative-preemption">Non-cooperative Preemption</a> section) monitors not only processors running goroutine code (where <code class="language-plaintext highlighter-rouge">P</code> is in <em>running</em> state), but also those making system calls (where <code class="language-plaintext highlighter-rouge">P</code> is in <em>syscall</em> state).
+<p>Interestingly, the <code class="language-plaintext highlighter-rouge">sysmon</code> (mentioned in the <a href="#non-cooperative-preemption">Non-cooperative Preemption</a> section) monitors not only processors running goroutine code (where <code class="language-plaintext highlighter-rouge">P</code> is in <em>running</em> state), but also those making system calls (where <code class="language-plaintext highlighter-rouge">P</code> is in <em>syscall</em> state).
 If a <code class="language-plaintext highlighter-rouge">P</code> remains in <em>syscall</em> state for more than 10ms, instead of non-cooperatively preempting the running goroutine, a <a href="#processor-handoff-handoffp">processor handoff</a> takes place.
 This keeps the association between goroutine <code class="language-plaintext highlighter-rouge">G</code> and thread <code class="language-plaintext highlighter-rouge">M</code>, and attaches another  thread <code class="language-plaintext highlighter-rouge">M1</code> to this <code class="language-plaintext highlighter-rouge">P</code>, allowing runnable goroutines to run on that <code class="language-plaintext highlighter-rouge">M1</code> thread.
 Apparently, as <code class="language-plaintext highlighter-rouge">P</code> is now executing code, its status is running rather than syscall as before.</p>
@@ -1136,7 +1140,7 @@ Before the fast path exits, <code class="language-plaintext highlighter-rouge">G
 </table>
 
 <p>In the slow path, the scheduler tries retrieving any idle processor <code class="language-plaintext highlighter-rouge">P</code> once again.
-If found, the goroutine <code class="language-plaintext highlighter-rouge">G</code> is scheduled to run on that <code class="language-plaintext highlighter-rouge">P</code>.
+If it’s found, the goroutine <code class="language-plaintext highlighter-rouge">G</code> is scheduled to run on that <code class="language-plaintext highlighter-rouge">P</code>.
 Otherwise, <code class="language-plaintext highlighter-rouge">G</code> is enqueued into the global run queue and the associated thread <code class="language-plaintext highlighter-rouge">M</code> is stopped by <a href="#stop-thread-stopm"><code class="language-plaintext highlighter-rouge">stopm</code></a> function, waiting to be woken up to continue the <a href="#schedule-loop">schedule loop</a>.</p>
 
 <h2 id="network-io-and-file-io">Network I/O and File I/O</h2>
@@ -1163,7 +1167,7 @@ To see how Go solves it, let’s take a look at how Go handles I/O operations un
 </code></pre></div></div>
 
 <p>Functions like <code class="language-plaintext highlighter-rouge">http.ListenAndServe()</code> and <code class="language-plaintext highlighter-rouge">http.HandleFunc()</code> might seem deceptively simple—but under the hood, they abstract away a lot of low-level networking complexity.
-Go relies on fundamental <a href="https://en.wikipedia.org/wiki/Unix_domain_socket">socket</a> operations (depicted in the figure below) to manage network communication.</p>
+Go relies on many fundamental <a href="https://en.wikipedia.org/wiki/Unix_domain_socket">socket</a> operations (depicted in the figure below) to manage network communication.</p>
 
 <table>
   <thead>
@@ -1178,9 +1182,9 @@ Go relies on fundamental <a href="https://en.wikipedia.org/wiki/Unix_domain_sock
   </tbody>
 </table>
 
-<p>Specifically, <code class="language-plaintext highlighter-rouge">http.ListenAndServe()</code> leverages the following system calls: <a href="https://man7.org/linux/man-pages/man2/socket.2.html"><code class="language-plaintext highlighter-rouge">socket()</code></a>, <a href="https://man7.org/linux/man-pages/man2/bind.2.html"><code class="language-plaintext highlighter-rouge">bind()</code></a>, <a href="https://man7.org/linux/man-pages/man2/listen.2.html"><code class="language-plaintext highlighter-rouge">listen()</code></a>, <a href="https://man7.org/linux/man-pages/man2/accept.2.html"><code class="language-plaintext highlighter-rouge">accept()</code></a> to create TCP sockets, which are essentially <a href="https://en.wikipedia.org/wiki/File_descriptor">file descriptors</a>.
-It binds the listening socket to the specified address and port, listens for incoming connections, and creates a new connected socket to handle client requests.
-This is achieved without requiring you to write any socket-handling code.
+<p>Specifically, <code class="language-plaintext highlighter-rouge">http.ListenAndServe()</code> leverages <a href="https://man7.org/linux/man-pages/man2/socket.2.html"><code class="language-plaintext highlighter-rouge">socket()</code></a>, <a href="https://man7.org/linux/man-pages/man2/bind.2.html"><code class="language-plaintext highlighter-rouge">bind()</code></a>, <a href="https://man7.org/linux/man-pages/man2/listen.2.html"><code class="language-plaintext highlighter-rouge">listen()</code></a>, <a href="https://man7.org/linux/man-pages/man2/accept.2.html"><code class="language-plaintext highlighter-rouge">accept()</code></a> system calls to create TCP sockets, which are essentially <a href="https://en.wikipedia.org/wiki/File_descriptor">file descriptors</a>.
+It binds the TCP listening socket to the specified address and port, listens for incoming connections, and creates a new connected socket to handle client requests.
+This is achieved without requiring you to write socket-handling code.
 Similarly, <code class="language-plaintext highlighter-rouge">http.HandleFunc()</code> registers your handler functions, abstracting away the lower-level details like using <a href="https://man7.org/linux/man-pages/man2/read.2.html"><code class="language-plaintext highlighter-rouge">read()</code></a> system call to read data, and <a href="https://man7.org/linux/man-pages/man2/write.2.html"><code class="language-plaintext highlighter-rouge">write()</code></a> system call to write data to the network socket.</p>
 
 <table>
@@ -1380,7 +1384,7 @@ That’s because upon compiling, the compiler rewrites calls to this function in
 
 <p>But when is the current goroutine stored in thread-local storage so it can be retrieved later?
 This happens during a goroutine context switch in the <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/asm_amd64.s#L411-L413"><code class="language-plaintext highlighter-rouge">gogo</code></a> function, which is called by <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3221-L3265"><code class="language-plaintext highlighter-rouge">execute</code></a>.
-It also occurs when a signal handler is invoked, in the <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/signal_unix.go#L420-L495"><code class="language-plaintext highlighter-rouge">sigtrampgo</code></a> function.</p>
+It also takes place when a signal handler is invoked, in the <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/signal_unix.go#L420-L495"><code class="language-plaintext highlighter-rouge">sigtrampgo</code></a> function.</p>
 
 <h3 id="goroutine-parking-gopark">Goroutine Parking: <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L390-L436"><code class="language-plaintext highlighter-rouge">gopark</code></a></h3>
 
@@ -1470,7 +1474,7 @@ This is achieved by <a href="https://linux.die.net/man/2/futex"><code class="lan
 <h3 id="processor-handoff-handoffp">Processor Handoff: <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3026-L3096"><code class="language-plaintext highlighter-rouge">handoffp</code></a></h3>
 
 <p><a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3026-L3096"><code class="language-plaintext highlighter-rouge">handoffp</code></a> is responsible for transferring the ownership of a processor <code class="language-plaintext highlighter-rouge">P</code> from a thread <code class="language-plaintext highlighter-rouge">M</code>s that is blocking in a system call to another thread <code class="language-plaintext highlighter-rouge">M1</code>.
-<code class="language-plaintext highlighter-rouge">P</code> will be associated with <code class="language-plaintext highlighter-rouge">M1</code> to make progress by calling <a href="#start-thread-startm"><code class="language-plaintext highlighter-rouge">startm</code></a> under certain conditions: if the global run queue is not empty, if its local run queue is not empty, if there is tracing or garbage collection work to do, or if no thread is currently handling netpoll.
+<code class="language-plaintext highlighter-rouge">P</code> will be associated with <code class="language-plaintext highlighter-rouge">M1</code> to make progress by calling <a href="#start-thread-startm"><code class="language-plaintext highlighter-rouge">startm</code></a> under certain conditions: if the global run queue is not empty, if its local run queue is not empty, if there is tracing work or garbage collection work to do, or if no thread is currently handling netpoll.
 If none of these conditions is met, <code class="language-plaintext highlighter-rouge">P</code> is returned to the processor idle list.</p>
 
 <h2 id="runtime-apis">Runtime APIs</h2>
@@ -1549,7 +1553,7 @@ If all other goroutines exit, the program crashes.
 </div>
 
       <div class="footer-col footer-col-3">
-        <p>Writings about programming</p>
+        <p>Writings about software engineering</p>
       </div>
     </div>
 
