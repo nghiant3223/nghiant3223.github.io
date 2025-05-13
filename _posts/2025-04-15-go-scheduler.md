@@ -4,6 +4,8 @@ title: "Go Scheduler"
 date: 2025-04-15
 ---
 
+<button id="scrollTop" title="Go to top">↑</button>
+
 # Go Scheduler
 
 * [Introduction](#introduction)
