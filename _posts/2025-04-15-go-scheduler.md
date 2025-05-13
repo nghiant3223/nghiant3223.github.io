@@ -4,7 +4,7 @@ title: "Go Scheduler"
 date: 2025-04-15
 ---
 
-# Go Scheduling
+# Go Scheduler
 
 ## Disclaimer
 
