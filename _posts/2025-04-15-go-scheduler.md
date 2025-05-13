@@ -231,7 +231,7 @@ In addition to stack growth and shrinkage, operations like garbage collection an
 Unlike goroutine, threads run scheduler code as soon as `M` is created, therefore the initial state of `M` is *running*.
 When `M` is created or woken up, the scheduler guarantees that there is always an *idle* processor `P` so that it can be associated with `M` to run Go code.
 If `M` is executing system call, it will be detached from `P` (will be described in [Handling System Calls](#handling-system-calls) section) and `P` might be acquired by another thread `M1` to continues its work.
-If `M` can't find a runnable goroutine from its local run queue, the global run queue, or `netpoll` (will be described in [Network I/O and File I/O](#network-io-and-file-io) section), it keeps spinning for stealing goroutines from other processors `P` and from the global run queue again.
+If `M` can't find a runnable goroutine from its local run queue, the global run queue, or `netpoll` (will be described in [How netpoll Works](#how-netpoll-works) section), it keeps spinning for stealing goroutines from other processors `P` and from the global run queue again.
 Note that not all `M` enters spinning state, it does so only if the number of spinning threads is less than half of the number of busy processors.
 When `M` has nothing to do, rather than being destroyed, it goes to sleep and waits to be acquired by a another processor `P1` later (described in [Finding a Runnable Goroutine](#finding-a-runnable-goroutine)).
 
@@ -448,7 +448,7 @@ The thread `M` looks for a runnable goroutine the following order, stop the chai
 3. 1/61 of the time, check the global run queue.
 4. Check local run queue of the associated processor `P` if `M` is spinning.
 5. Check the global run queue again.
-6. Check netpoll for I/O ready goroutine (described in [Network I/O and File I/O](#network-io-and-file-io) section). 
+6. Check netpoll for I/O ready goroutine (described in [How netpoll Works](#how-netpoll-works) section). 
 7. Steal from other processors `P1`'s local run queue.
 8. Check garbage collection worker goroutine's availability again.
 9. Check the global run queue again if `M` is spinning.
