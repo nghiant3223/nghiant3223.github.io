@@ -84,8 +84,13 @@ linker ==> |Executable binary file|_end(((End)))
 
 Go runtime is the core of the Go programming language, providing essential functionalities such as scheduling, memory managements, and data structures.
 To understand Go scheduler, you have to understand Go runtime first.
-The implementation of Go runtime can be found at [runtime](https://github.com/golang/go/tree/go1.24.0/src/runtime) package.
+It's nothing but a collection of functions and data structures make Go programs work.
+The implementation of Go runtime can be found in [runtime](https://github.com/golang/go/tree/go1.24.0/src/runtime) package.
 Go runtime is written in a combination of Go and assembly code, with the assembly code primarily used for low-level operations such as dealing with registers.
+
+| <img src="/assets/2025-03-11-go-scheduling/go_runtime_relationship.png" width=300> |
+|:----------------------------------------------------------------------------------:|
+|                               The role of Go runtime                               |
 
 Upon compiling, Go compiler replaces some keywords and built-in functions with Go runtime's function calls.
 For example, the `go` keyword—used to spawn a new goroutine—is substituted with a call to [`runtime.newproc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L5014-L5030), or the `new` function—used to allocate a new object—is replaced with a call to [`runtime.newobject`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1710-L1715).

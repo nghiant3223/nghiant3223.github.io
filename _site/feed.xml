@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-13T22:11:56+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button></p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-13T22:55:46+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button></p>
 
 <h1 id="go-scheduler">Go Scheduler</h1>
 
@@ -84,8 +84,22 @@ linker ==&gt; |Executable binary file|_end(((End)))
 
 <p>Go runtime is the core of the Go programming language, providing essential functionalities such as scheduling, memory managements, and data structures.
 To understand Go scheduler, you have to understand Go runtime first.
-The implementation of Go runtime can be found at <a href="https://github.com/golang/go/tree/go1.24.0/src/runtime">runtime</a> package.
+It’s nothing but a collection of functions and data structures make Go programs work.
+The implementation of Go runtime can be found in <a href="https://github.com/golang/go/tree/go1.24.0/src/runtime">runtime</a> package.
 Go runtime is written in a combination of Go and assembly code, with the assembly code primarily used for low-level operations such as dealing with registers.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align: center"><img src="/assets/2025-03-11-go-scheduling/go_runtime_relationship.png" width="300" /></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: center">The role of Go runtime</td>
+    </tr>
+  </tbody>
+</table>
 
 <p>Upon compiling, Go compiler replaces some keywords and built-in functions with Go runtime’s function calls.
 For example, the <code class="language-plaintext highlighter-rouge">go</code> keyword—used to spawn a new goroutine—is substituted with a call to <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L5014-L5030"><code class="language-plaintext highlighter-rouge">runtime.newproc</code></a>, or the <code class="language-plaintext highlighter-rouge">new</code> function—used to allocate a new object—is replaced with a call to <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1710-L1715"><code class="language-plaintext highlighter-rouge">runtime.newobject</code></a>.</p>
