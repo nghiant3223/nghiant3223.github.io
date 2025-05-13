@@ -91,7 +91,7 @@ Typically, there are three models: many-to-one (N:1), one-to-one (1:1), and many
 
 | <img src="/assets/2025-03-11-go-scheduling/n_to_1_multithreading_model.png"> | <img src="/assets/2025-03-11-go-scheduling/1_to_1_multithreading_model.png"> | <img src="/assets/2025-03-11-go-scheduling/m_to_n_multithreading_model.png"> |
 |:----------------------------------------------------------------------------:|:----------------------------------------------------------------------------:|:----------------------------------------------------------------------------:|
-|               Many-to-one<br/>multithreading model<sup>1</sup>               |               One-to-one<br/>multithreading model<sup>2</sup>                |              Many-to-many<br/>multithreading model<sup>3</sup>               |
+|  Many-to-one<br/>multithreading model<sup><a href="#references">1</a></sup>  |  One-to-one<br/>multithreading model<sup><a href="#references">2</a></sup>   | Many-to-many<br/>multithreading model<sup><a href="#references">3</a></sup>  |
 
 Go opts for the many-to-many (M:N) threading model, which allows multiple goroutines to be multiplexed onto multiple kernel threads.
 This approach sacrifices complexity to take advantage of multicore system and make Go program efficient with system calls, addressing the problems of both N:1 and 1:1 models.
@@ -583,7 +583,7 @@ The execution switch from main program to signal handler is triggered by the ker
 
 | <img src="/assets/2025-03-11-go-scheduling/signal_delivery_and_handler_execution.png" width=500 /> | 
 |:--------------------------------------------------------------------------------------------------:| 
-|                         Signal delivery and handler execution<sup>6</sup>                          |
+|            Signal delivery and handler execution<sup><a href="#references">6</a></sup>             |
 
 In the signal handler, the program counter is set to the [`asyncPreempt`](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt.go#L295-L299) function, allowing the goroutine to be suspended and creating space for preemption.
 [`asyncPreempt`](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt_arm64.s) function, which is implemented in assembly, saves the goroutine's registers and call [`asyncPreempt2`](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt.go#L302-L311) function at line [47](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt_arm64.s#L47).
@@ -786,7 +786,7 @@ Go relies on fundamental [socket](https://en.wikipedia.org/wiki/Unix_domain_sock
 
 | <img src="/assets/2025-03-11-go-scheduling/socket_system_calls_in_http_server.png" width=300/> | 
 |:----------------------------------------------------------------------------------------------:| 
-|                 Overview of system calls used with stream sockets<sup>7</sup>                  |
+|    Overview of system calls used with stream sockets<sup><a href="#references">7</a></sup>     |
 
 Specifically, `http.ListenAndServe()` leverages the following system calls: [`socket()`](https://man7.org/linux/man-pages/man2/socket.2.html), [`bind()`](https://man7.org/linux/man-pages/man2/bind.2.html), [`listen()`](https://man7.org/linux/man-pages/man2/listen.2.html), [`accept()`](https://man7.org/linux/man-pages/man2/accept.2.html) to create TCP sockets, which are essentially [file descriptors](https://en.wikipedia.org/wiki/File_descriptor).
 It binds the listening socket to the specified address and port, listens for incoming connections, and creates a new connected socket to handle client requests.
@@ -809,9 +809,9 @@ Blocking I/O is simpler to implement but inefficient, as it requires the applica
 In contrast, non-blocking I/O is more complex, but when implemented correctly, it enables significantly better resource utilization.
 See the figures below for a visual comparison of these two models.
 
-| <img src="/assets/2025-03-11-go-scheduling/blocking_io.png" width=300/> | <img src="/assets/2025-03-11-go-scheduling/non_blocking_io.png" width=300/> | 
-|:-----------------------------------------------------------------------:|:---------------------------------------------------------------------------:| 
-|                     Blocking I/O model<sup>8</sup>                      |                     Non-blocking I/O model<sup>9</sup>                      |
+| <img src="/assets/2025-03-11-go-scheduling/blocking_io.png" width=300/> | <img src="/assets/2025-03-11-go-scheduling/non_blocking_io.png" width=300/> |
+|:-----------------------------------------------------------------------:|:---------------------------------------------------------------------------:|
+|        Blocking I/O model<sup><a href="#references">8</a></sup>         |        Non-blocking I/O model<sup><a href="#references">9</a></sup>         |
 
 Another I/O model worth mentioning is I/O multiplexing, in which [`select`](https://man7.org/linux/man-pages/man2/select.2.html), or [`poll`](https://man7.org/linux/man-pages/man2/poll.2.html) system call is used to wait for one of a set of file descriptors to become ready to perform I/O.
 In this model, the application blocks on one of these system calls, rather than on the actual I/O system calls, such as [`recvfrom`](https://man7.org/linux/man-pages/man2/recv.2.html) shown in the figures above.
@@ -819,7 +819,7 @@ When [`select`](https://man7.org/linux/man-pages/man2/select.2.html) returns tha
 
 | <img src="/assets/2025-03-11-go-scheduling/io_multiplexing.png" width=500/> |
 |:---------------------------------------------------------------------------:|
-|                     I/O multiplexing model<sup>10</sup>                     |
+|        I/O multiplexing model<sup><a href="#references">10</a></sup>        |
 
 ## I/O Model in Go
 
@@ -1059,4 +1059,4 @@ If all other goroutines exit, the program crashes.
 - [8], [9], [10] W. Richard Stevens. [*Unix Network Programming*](https://www.amazon.com/UNIX-Network-Programming-Richard-Stevens/dp/0139498761).
 - zhuanlan.zhihu.com. [Golang program startup process analysis](https://zhuanlan.zhihu.com/p/436925356).
 - Madhav Jivrajani. [GopherCon 2021: Queues, Fairness, and The Go Scheduler](https://www.youtube.com/watch?v=wQpC99Xu1U4&t=2375s&ab_channel=GopherAcademy).
-- [1], [2], [3] Abraham Silberschatz, Peter B. Galvin, Greg Gagne. [*Operating System Concepts*](https://www.amazon.com/Operating-System-Concepts-Abraham-Silberschatz/dp/1119800366/ref=zg-te-pba_d_sccl_3_1/138-7692107-2007040).
+- <div><span id="ref-1"/><span id="ref-2"/><span id="ref-3"/>[1], [2], [3] Abraham Silberschatz, Peter B. Galvin, Greg Gagne. <a href="https://www.amazon.com/Operating-System-Concepts-Abraham-Silberschatz/dp/1119800366/ref=zg-te-pba_d_sccl_3_1/138-7692107-2007040"><i>Operating System Concepts.</i></a></div>

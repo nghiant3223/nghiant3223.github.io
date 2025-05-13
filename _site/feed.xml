@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-13T14:17:54+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about programming</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<h1 id="go-scheduler">Go Scheduler</h1>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-13T14:38:11+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about programming</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<h1 id="go-scheduler">Go Scheduler</h1>
 
 <h2 id="disclaimer">Disclaimer</h2>
 
@@ -99,9 +99,9 @@ Typically, there are three models: many-to-one (N:1), one-to-one (1:1), and many
   </thead>
   <tbody>
     <tr>
-      <td style="text-align: center">Many-to-one<br />multithreading model<sup>1</sup></td>
-      <td style="text-align: center">One-to-one<br />multithreading model<sup>2</sup></td>
-      <td style="text-align: center">Many-to-many<br />multithreading model<sup>3</sup></td>
+      <td style="text-align: center">Many-to-one<br />multithreading model<sup><a href="#references">1</a></sup></td>
+      <td style="text-align: center">One-to-one<br />multithreading model<sup><a href="#references">2</a></sup></td>
+      <td style="text-align: center">Many-to-many<br />multithreading model<sup><a href="#references">3</a></sup></td>
     </tr>
   </tbody>
 </table>
@@ -762,7 +762,7 @@ The execution switch from main program to signal handler is triggered by the ker
   </thead>
   <tbody>
     <tr>
-      <td style="text-align: center">Signal delivery and handler execution<sup>6</sup></td>
+      <td style="text-align: center">Signal delivery and handler execution<sup><a href="#references">6</a></sup></td>
     </tr>
   </tbody>
 </table>
@@ -1008,7 +1008,7 @@ Go relies on fundamental <a href="https://en.wikipedia.org/wiki/Unix_domain_sock
   </thead>
   <tbody>
     <tr>
-      <td style="text-align: center">Overview of system calls used with stream sockets<sup>7</sup></td>
+      <td style="text-align: center">Overview of system calls used with stream sockets<sup><a href="#references">7</a></sup></td>
     </tr>
   </tbody>
 </table>
@@ -1052,8 +1052,8 @@ See the figures below for a visual comparison of these two models.</p>
   </thead>
   <tbody>
     <tr>
-      <td style="text-align: center">Blocking I/O model<sup>8</sup></td>
-      <td style="text-align: center">Non-blocking I/O model<sup>9</sup></td>
+      <td style="text-align: center">Blocking I/O model<sup><a href="#references">8</a></sup></td>
+      <td style="text-align: center">Non-blocking I/O model<sup><a href="#references">9</a></sup></td>
     </tr>
   </tbody>
 </table>
@@ -1070,7 +1070,7 @@ When <a href="https://man7.org/linux/man-pages/man2/select.2.html"><code class="
   </thead>
   <tbody>
     <tr>
-      <td style="text-align: center">I/O multiplexing model<sup>10</sup></td>
+      <td style="text-align: center">I/O multiplexing model<sup><a href="#references">10</a></sup></td>
     </tr>
   </tbody>
 </table>
@@ -1337,7 +1337,9 @@ If all other goroutines exit, the program crashes.
   <li>[8], [9], [10] W. Richard Stevens. <a href="https://www.amazon.com/UNIX-Network-Programming-Richard-Stevens/dp/0139498761"><em>Unix Network Programming</em></a>.</li>
   <li>zhuanlan.zhihu.com. <a href="https://zhuanlan.zhihu.com/p/436925356">Golang program startup process analysis</a>.</li>
   <li>Madhav Jivrajani. <a href="https://www.youtube.com/watch?v=wQpC99Xu1U4&amp;t=2375s&amp;ab_channel=GopherAcademy">GopherCon 2021: Queues, Fairness, and The Go Scheduler</a>.</li>
-  <li>[1], [2], [3] Abraham Silberschatz, Peter B. Galvin, Greg Gagne. <a href="https://www.amazon.com/Operating-System-Concepts-Abraham-Silberschatz/dp/1119800366/ref=zg-te-pba_d_sccl_3_1/138-7692107-2007040"><em>Operating System Concepts</em></a>.</li>
+  <li>
+    <div><span id="ref-1" /><span id="ref-2" /><span id="ref-3" />[1], [2], [3] Abraham Silberschatz, Peter B. Galvin, Greg Gagne. <a href="https://www.amazon.com/Operating-System-Concepts-Abraham-Silberschatz/dp/1119800366/ref=zg-te-pba_d_sccl_3_1/138-7692107-2007040"><i>Operating System Concepts.</i></a></div>
+  </li>
 </ul>]]></content><author><name>nghiant3223@gmail.com</name></author><summary type="html"><![CDATA[Go Scheduler]]></summary></entry><entry><title type="html">Deadlock In MySQL</title><link href="http://localhost:4000/2024/03/09/deadlock_in_mysql.html" rel="alternate" type="text/html" title="Deadlock In MySQL" /><published>2024-03-09T00:00:00+07:00</published><updated>2024-03-09T00:00:00+07:00</updated><id>http://localhost:4000/2024/03/09/deadlock_in_mysql</id><content type="html" xml:base="http://localhost:4000/2024/03/09/deadlock_in_mysql.html"><![CDATA[<h1 id="deadlock-in-mysql">Deadlock In MySQL</h1>
 
 <h2 id="introduction">Introduction</h2>
