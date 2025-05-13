@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-13T18:59:00+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about programming</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button></p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-13T19:07:22+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about programming</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button></p>
 
 <h1 id="go-scheduler">Go Scheduler</h1>
 
@@ -17,7 +17,7 @@
   <li><a href="#network-io-and-file-io">Network I/O and File I/O</a></li>
   <li><a href="#how-netpoll-works">How netpoll Works</a></li>
   <li><a href="#garbage-collector">Garbage Collector</a></li>
-  <li><a href="#scheduling-common-functions">Scheduling Common Functions</a></li>
+  <li><a href="#common-functions">Common Functions</a></li>
   <li><a href="#runtime-apis">Runtime APIs</a></li>
 </ul>
 
@@ -1226,7 +1226,7 @@ This design allows the garbage collector to run concurrently with the program, s
 <p>Note that in step 2, garbage collection worker goroutine runs concurrently with regular goroutines on the same processor <code class="language-plaintext highlighter-rouge">P</code>.
 The <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3267-L3646"><code class="language-plaintext highlighter-rouge">findRunnable</code></a> function (mentioned in <a href="#finding-a-runnable-goroutine">Finding a Runnable Goroutine</a> section) not only looks for regular goroutines but also for GC goroutines (step 1 and 2).</p>
 
-<h2 id="scheduling-common-functions">Scheduling Common Functions</h2>
+<h2 id="common-functions">Common Functions</h2>
 
 <h3 id="getting-goroutine-getg">Getting Goroutine: <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/stubs.go#L28-L31"><code class="language-plaintext highlighter-rouge">getg</code></a></h3>
 

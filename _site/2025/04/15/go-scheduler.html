@@ -161,7 +161,7 @@
   <li><a href="#network-io-and-file-io">Network I/O and File I/O</a></li>
   <li><a href="#how-netpoll-works">How netpoll Works</a></li>
   <li><a href="#garbage-collector">Garbage Collector</a></li>
-  <li><a href="#scheduling-common-functions">Scheduling Common Functions</a></li>
+  <li><a href="#common-functions">Common Functions</a></li>
   <li><a href="#runtime-apis">Runtime APIs</a></li>
 </ul>
 
@@ -1370,7 +1370,7 @@ This design allows the garbage collector to run concurrently with the program, s
 <p>Note that in step 2, garbage collection worker goroutine runs concurrently with regular goroutines on the same processor <code class="language-plaintext highlighter-rouge">P</code>.
 The <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3267-L3646"><code class="language-plaintext highlighter-rouge">findRunnable</code></a> function (mentioned in <a href="#finding-a-runnable-goroutine">Finding a Runnable Goroutine</a> section) not only looks for regular goroutines but also for GC goroutines (step 1 and 2).</p>
 
-<h2 id="scheduling-common-functions">Scheduling Common Functions</h2>
+<h2 id="common-functions">Common Functions</h2>
 
 <h3 id="getting-goroutine-getg">Getting Goroutine: <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/stubs.go#L28-L31"><code class="language-plaintext highlighter-rouge">getg</code></a></h3>
 

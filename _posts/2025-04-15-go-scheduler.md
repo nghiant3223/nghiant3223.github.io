@@ -22,7 +22,7 @@ date: 2025-04-15
 * [Network I/O and File I/O](#network-io-and-file-io)
 * [How netpoll Works](#how-netpoll-works)
 * [Garbage Collector](#garbage-collector)
-* [Scheduling Common Functions](#scheduling-common-functions)
+* [Common Functions](#common-functions)
 * [Runtime APIs](#runtime-apis)
 
 ## Disclaimer
@@ -946,7 +946,7 @@ A Go garbage collection cycle can be divided into 4 stages:
 Note that in step 2, garbage collection worker goroutine runs concurrently with regular goroutines on the same processor `P`.
 The [`findRunnable`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3267-L3646) function (mentioned in [Finding a Runnable Goroutine](#finding-a-runnable-goroutine) section) not only looks for regular goroutines but also for GC goroutines (step 1 and 2).
 
-## Scheduling Common Functions
+## Common Functions
 
 ### Getting Goroutine: [`getg`](https://github.com/golang/go/blob/go1.24.0/src/runtime/stubs.go#L28-L31)
 
