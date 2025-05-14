@@ -235,6 +235,7 @@ Unlike the system stack, a regular goroutine's stack is dynamically sized; it gr
 However, the operations for growing or shrinking a stack must themselves run on a valid stack. For this, the system stack is used.
 When the scheduler—running on an `M`—needs to perform stack management, it switches from the goroutine's stack to the system stack.
 In addition to stack growth and shrinkage, operations like garbage collection and [parking a goroutine](#goroutine-parking-gopark) also require execution on the system stack.
+Whenever a thread performs such operation, it switches to the system stack and executes the operation in the context of `g0`.
 
 Unlike goroutine, threads run scheduler code as soon as `M` is created, therefore the initial state of `M` is *running*.
 When `M` is created or woken up, the scheduler guarantees that there is always an *idle* processor `P` so that it can be associated with `M` to run Go code.

@@ -13,14 +13,14 @@
 <link rel="canonical" href="http://localhost:4000/2025/04/15/go-scheduler.html" />
 <meta property="og:url" content="http://localhost:4000/2025/04/15/go-scheduler.html" />
 <meta property="og:site_name" content="Melatoni" />
-<meta property="og:image" content="https://nghiant3223.github.io/assets/2025-03-11-go-scheduling/primitive_scheduler.png" />
+<meta property="og:image" content="https://raw.githubusercontent.com/nghiant3223/nghiant3223.github.io/refs/heads/main/assets/2025-03-11-go-scheduling/primitive_scheduler.png" />
 <meta property="og:type" content="article" />
 <meta property="article:published_time" content="2025-04-15T00:00:00+07:00" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta property="twitter:image" content="https://nghiant3223.github.io/assets/2025-03-11-go-scheduling/primitive_scheduler.png" />
+<meta property="twitter:image" content="https://raw.githubusercontent.com/nghiant3223/nghiant3223.github.io/refs/heads/main/assets/2025-03-11-go-scheduling/primitive_scheduler.png" />
 <meta property="twitter:title" content="Go Scheduler" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"nghiant3223@gmail.com"},"dateModified":"2025-04-15T00:00:00+07:00","datePublished":"2025-04-15T00:00:00+07:00","description":"↑ ↓","headline":"Go Scheduler","image":"https://nghiant3223.github.io/assets/2025-03-11-go-scheduling/primitive_scheduler.png","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2025/04/15/go-scheduler.html"},"url":"http://localhost:4000/2025/04/15/go-scheduler.html"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"nghiant3223@gmail.com"},"dateModified":"2025-04-15T00:00:00+07:00","datePublished":"2025-04-15T00:00:00+07:00","description":"↑ ↓","headline":"Go Scheduler","image":"https://raw.githubusercontent.com/nghiant3223/nghiant3223.github.io/refs/heads/main/assets/2025-03-11-go-scheduling/primitive_scheduler.png","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2025/04/15/go-scheduler.html"},"url":"http://localhost:4000/2025/04/15/go-scheduler.html"}</script>
 <!-- End Jekyll SEO tag -->
 <link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="Melatoni" /></head>
 <body><style>
@@ -496,7 +496,8 @@ In order for the Go scheduler to make threads work well in GMP model, <a href="h
 Unlike the system stack, a regular goroutine’s stack is dynamically sized; it grows and shrinks as needed.
 However, the operations for growing or shrinking a stack must themselves run on a valid stack. For this, the system stack is used.
 When the scheduler—running on an <code class="language-plaintext highlighter-rouge">M</code>—needs to perform stack management, it switches from the goroutine’s stack to the system stack.
-In addition to stack growth and shrinkage, operations like garbage collection and <a href="#goroutine-parking-gopark">parking a goroutine</a> also require execution on the system stack.</p>
+In addition to stack growth and shrinkage, operations like garbage collection and <a href="#goroutine-parking-gopark">parking a goroutine</a> also require execution on the system stack.
+Whenever a thread performs such operation, it switches to the system stack and executes the operation in the context of <code class="language-plaintext highlighter-rouge">g0</code>.</p>
 
 <p>Unlike goroutine, threads run scheduler code as soon as <code class="language-plaintext highlighter-rouge">M</code> is created, therefore the initial state of <code class="language-plaintext highlighter-rouge">M</code> is <em>running</em>.
 When <code class="language-plaintext highlighter-rouge">M</code> is created or woken up, the scheduler guarantees that there is always an <em>idle</em> processor <code class="language-plaintext highlighter-rouge">P</code> so that it can be associated with <code class="language-plaintext highlighter-rouge">M</code> to run Go code.
