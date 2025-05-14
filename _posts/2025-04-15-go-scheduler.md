@@ -2,7 +2,7 @@
 layout: post
 title: "Go Scheduler"
 date: 2025-04-15
-image: https://nghiant3223.github.io/assets/2025-03-11-go-scheduling/primitive_scheduler.png
+image: https://raw.githubusercontent.com/nghiant3223/nghiant3223.github.io/refs/heads/main/assets/2025-03-11-go-scheduling/primitive_scheduler.png
 ---
 
 <button id="scrollTop" title="Go to top">↑</button>
