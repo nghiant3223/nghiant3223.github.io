@@ -8,8 +8,8 @@
 <meta property="og:title" content="Go Scheduler" />
 <meta name="author" content="nghiant3223@gmail.com" />
 <meta property="og:locale" content="en_US" />
-<meta name="description" content="↑" />
-<meta property="og:description" content="↑" />
+<meta name="description" content="↑ ↓" />
+<meta property="og:description" content="↑ ↓" />
 <link rel="canonical" href="http://localhost:4000/2025/04/15/go-scheduler.html" />
 <meta property="og:url" content="http://localhost:4000/2025/04/15/go-scheduler.html" />
 <meta property="og:site_name" content="Melatoni" />
@@ -18,7 +18,7 @@
 <meta name="twitter:card" content="summary" />
 <meta property="twitter:title" content="Go Scheduler" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"nghiant3223@gmail.com"},"dateModified":"2025-04-15T00:00:00+07:00","datePublished":"2025-04-15T00:00:00+07:00","description":"↑","headline":"Go Scheduler","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2025/04/15/go-scheduler.html"},"url":"http://localhost:4000/2025/04/15/go-scheduler.html"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"nghiant3223@gmail.com"},"dateModified":"2025-04-15T00:00:00+07:00","datePublished":"2025-04-15T00:00:00+07:00","description":"↑ ↓","headline":"Go Scheduler","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2025/04/15/go-scheduler.html"},"url":"http://localhost:4000/2025/04/15/go-scheduler.html"}</script>
 <!-- End Jekyll SEO tag -->
 <link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="Melatoni" /></head>
 <body><style>
@@ -101,6 +101,27 @@
     #scrollTop {
         display: none;
         position: fixed;
+        bottom: 90px;
+        right: 30px;
+        z-index: 100;
+        font-size: 18px;
+        border: none;
+        outline: none;
+        background-color: #333;
+        color: white;
+        cursor: pointer;
+        padding: 8px 14px;
+        border-radius: 50%;
+        transition: background-color 0.3s;
+    }
+
+    #scrollTop:hover {
+        background-color: #555;
+    }
+
+    #scrollBottom {
+        display: none;
+        position: fixed;
         bottom: 40px;
         right: 30px;
         z-index: 100;
@@ -110,12 +131,12 @@
         background-color: #333;
         color: white;
         cursor: pointer;
-        padding: 10px 14px;
+        padding: 8px 14px;
         border-radius: 50%;
         transition: background-color 0.3s;
     }
 
-    #scrollTop:hover {
+    #scrollBottom:hover {
         background-color: #555;
     }
 
@@ -146,7 +167,8 @@
     });
 </script>
 
-<p><button id="scrollTop" title="Go to top">↑</button></p>
+<p><button id="scrollTop" title="Go to top">↑</button>
+<button id="scrollBottom" title="Go to bottom">↓</button></p>
 
 <h1 id="go-scheduler">Go Scheduler</h1>
 
@@ -230,8 +252,8 @@ linker ==&gt; |Executable binary file|_end(((End)))
     </tbody>
 </table>
 
-<p>Go runtime is the core of the Go programming language, providing essential functionalities such as scheduling, memory managements, and data structures.
-To understand Go scheduler, you have to understand Go runtime first.
+<p>To understand Go scheduler, you have to understand Go runtime first.
+Go runtime is the core of the Go programming language, providing essential functionalities such as scheduling, memory managements, and data structures.
 It’s nothing but a collection of functions and data structures make Go programs work.
 The implementation of Go runtime can be found in <a href="https://github.com/golang/go/tree/go1.24.0/src/runtime">runtime</a> package.
 Go runtime is written in a combination of Go and assembly code, with the assembly code primarily used for low-level operations such as dealing with registers.</p>
@@ -1525,6 +1547,8 @@ If all other goroutines exit, the program crashes.
   </li>
 </ul>
 
+<div class="giscus" id="reaction"></div>
+
 
 <script src="https://unpkg.com/medium-zoom@1.1.0/dist/medium-zoom.min.js"></script>
 <script>
@@ -1536,11 +1560,23 @@ If all other goroutines exit, the program crashes.
 <script>
     // Show button when scrolling down
     window.onscroll = function () {
-        const btn = document.getElementById("scrollTop");
+        const scrollTopBtn = document.getElementById("scrollTop");
         if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
-            btn.style.display = "block";
+            scrollTopBtn.style.display = "block";
         } else {
-            btn.style.display = "none";
+            scrollTopBtn.style.display = "none";
+        }
+
+        const scrollBottomBtn = document.getElementById("scrollBottom");
+        const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+        const windowHeight = window.innerHeight;
+        const docHeight = document.documentElement.scrollHeight;
+
+        // Show button if we're not near the bottom
+        if (docHeight - (scrollTop + windowHeight) > 300) {
+            scrollBottomBtn.style.display = "block";
+        } else {
+            scrollBottomBtn.style.display = "none";
         }
     };
 
@@ -1548,6 +1584,28 @@ If all other goroutines exit, the program crashes.
     document.getElementById("scrollTop").addEventListener("click", function () {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     });
+
+    // Scroll to bottom when button is clicked
+    document.getElementById("scrollBottom").addEventListener("click", function () {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    });
+</script>
+
+<script src="https://giscus.app/client.js"
+        data-repo="nghiant3223/nghiant3223.github.io"
+        data-repo-id="R_kgDOJ-uLAQ"
+        data-category="General"
+        data-category-id="DIC_kwDOJ-uLAc4CqGrC"
+        data-mapping="title"
+        data-strict="0"
+        data-reactions-enabled="1"
+        data-emit-metadata="1"
+        data-input-position="top"
+        data-theme="light"
+        data-lang="en"
+        data-loading="lazy"
+        crossorigin="anonymous"
+        async>
 </script>
       </div>
     </main><footer class="site-footer h-card">

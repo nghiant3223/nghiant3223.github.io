@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-13T22:55:46+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button></p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-14T08:33:56+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button>
+<button id="scrollBottom" title="Go to bottom">↓</button></p>
 
 <h1 id="go-scheduler">Go Scheduler</h1>
 
@@ -82,8 +83,8 @@ linker ==&gt; |Executable binary file|_end(((End)))
     </tbody>
 </table>
 
-<p>Go runtime is the core of the Go programming language, providing essential functionalities such as scheduling, memory managements, and data structures.
-To understand Go scheduler, you have to understand Go runtime first.
+<p>To understand Go scheduler, you have to understand Go runtime first.
+Go runtime is the core of the Go programming language, providing essential functionalities such as scheduling, memory managements, and data structures.
 It’s nothing but a collection of functions and data structures make Go programs work.
 The implementation of Go runtime can be found in <a href="https://github.com/golang/go/tree/go1.24.0/src/runtime">runtime</a> package.
 Go runtime is written in a combination of Go and assembly code, with the assembly code primarily used for low-level operations such as dealing with registers.</p>
@@ -1375,7 +1376,9 @@ If all other goroutines exit, the program crashes.
   <li>
     <div><span id="ref-1" /><span id="ref-2" /><span id="ref-3" />[1], [2], [3] Abraham Silberschatz, Peter B. Galvin, Greg Gagne. <a href="https://www.amazon.com/Operating-System-Concepts-Abraham-Silberschatz/dp/1119800366/ref=zg-te-pba_d_sccl_3_1/138-7692107-2007040"><i>Operating System Concepts.</i></a></div>
   </li>
-</ul>]]></content><author><name>nghiant3223@gmail.com</name></author><summary type="html"><![CDATA[↑]]></summary></entry><entry><title type="html">Deadlock In MySQL</title><link href="http://localhost:4000/2024/03/09/deadlock_in_mysql.html" rel="alternate" type="text/html" title="Deadlock In MySQL" /><published>2024-03-09T00:00:00+07:00</published><updated>2024-03-09T00:00:00+07:00</updated><id>http://localhost:4000/2024/03/09/deadlock_in_mysql</id><content type="html" xml:base="http://localhost:4000/2024/03/09/deadlock_in_mysql.html"><![CDATA[<h1 id="deadlock-in-mysql">Deadlock In MySQL</h1>
+</ul>
+
+<div class="giscus" id="reaction"></div>]]></content><author><name>nghiant3223@gmail.com</name></author><summary type="html"><![CDATA[↑ ↓]]></summary></entry><entry><title type="html">Deadlock In MySQL</title><link href="http://localhost:4000/2024/03/09/deadlock_in_mysql.html" rel="alternate" type="text/html" title="Deadlock In MySQL" /><published>2024-03-09T00:00:00+07:00</published><updated>2024-03-09T00:00:00+07:00</updated><id>http://localhost:4000/2024/03/09/deadlock_in_mysql</id><content type="html" xml:base="http://localhost:4000/2024/03/09/deadlock_in_mysql.html"><![CDATA[<h1 id="deadlock-in-mysql">Deadlock In MySQL</h1>
 
 <h2 id="introduction">Introduction</h2>
 
