@@ -364,7 +364,7 @@ After initialization, `G` transitions from *dead* state to *runnable* state, ind
 
 As mentioned earlier, each processor `P` has a run queue composed of two parts: [`runnext`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L655-L667) and [`runq`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654).
 When a new goroutine is created, it is placed in [`runnext`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L655-L667).
-If [`runnext`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L655-L667) already contains a goroutine `G1`, the thread attempts to move `G1` to [`runq`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654)—provided [`runq`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654) is not full—and put `G` into [`runnext`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L655-L667).
+If [`runnext`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L655-L667) already contains a goroutine `G1`, the scheduler attempts to move `G1` to [`runq`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654)—provided [`runq`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654) is not full—and put `G` into [`runnext`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L655-L667).
 If [`runq`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654) is full, `G1` along with half of the goroutines in [`runq`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654) are moved to the global run queue to reduce the workload for `P`.
 
 ### Waking Up Processor
