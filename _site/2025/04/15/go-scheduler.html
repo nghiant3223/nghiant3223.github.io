@@ -696,7 +696,7 @@ After initialization, <code class="language-plaintext highlighter-rouge">G</code
 
 <p>As mentioned earlier, each processor <code class="language-plaintext highlighter-rouge">P</code> has a run queue composed of two parts: <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L655-L667"><code class="language-plaintext highlighter-rouge">runnext</code></a> and <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654"><code class="language-plaintext highlighter-rouge">runq</code></a>.
 When a new goroutine is created, it is placed in <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L655-L667"><code class="language-plaintext highlighter-rouge">runnext</code></a>.
-If <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L655-L667"><code class="language-plaintext highlighter-rouge">runnext</code></a> already contains a goroutine <code class="language-plaintext highlighter-rouge">G1</code>, the thread attempts to move <code class="language-plaintext highlighter-rouge">G1</code> to <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654"><code class="language-plaintext highlighter-rouge">runq</code></a>—provided <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654"><code class="language-plaintext highlighter-rouge">runq</code></a> is not full—and put <code class="language-plaintext highlighter-rouge">G</code> into <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L655-L667"><code class="language-plaintext highlighter-rouge">runnext</code></a>.
+If <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L655-L667"><code class="language-plaintext highlighter-rouge">runnext</code></a> already contains a goroutine <code class="language-plaintext highlighter-rouge">G1</code>, the scheduler attempts to move <code class="language-plaintext highlighter-rouge">G1</code> to <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654"><code class="language-plaintext highlighter-rouge">runq</code></a>—provided <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654"><code class="language-plaintext highlighter-rouge">runq</code></a> is not full—and put <code class="language-plaintext highlighter-rouge">G</code> into <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L655-L667"><code class="language-plaintext highlighter-rouge">runnext</code></a>.
 If <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654"><code class="language-plaintext highlighter-rouge">runq</code></a> is full, <code class="language-plaintext highlighter-rouge">G1</code> along with half of the goroutines in <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L654-L654"><code class="language-plaintext highlighter-rouge">runq</code></a> are moved to the global run queue to reduce the workload for <code class="language-plaintext highlighter-rouge">P</code>.</p>
 
 <h3 id="waking-up-processor">Waking Up Processor</h3>
@@ -1540,6 +1540,13 @@ All deferred calls run before terminating the goroutine.
 The program continues execution of other goroutines.
 If all other goroutines exit, the program crashes.
 <a href="https://pkg.go.dev/runtime#Goexit"><code class="language-plaintext highlighter-rouge">Goexit</code></a> should be used testing rather than real-world application, where you want to abort the test case early (for example, if preconditions aren’t met), but you still want deferred cleanup to run.</p>
+
+<h2 id="conclusion">Conclusion</h2>
+
+<p>The Go scheduler is a powerful and efficient system that enables lightweight concurrency through goroutines.
+In this blog, we explored its evolution—from the primitive model to the GMP architecture—and key components like goroutine creation, preemption, syscall handling, and netpoll integration.</p>
+
+<p>Hope you will find this knowledge useful in writing more efficient and reliable Go programs! 😄</p>
 
 <h2 id="references">References</h2>
 

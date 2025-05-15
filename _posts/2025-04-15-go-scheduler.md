@@ -1082,7 +1082,7 @@ If all other goroutines exit, the program crashes.
 The Go scheduler is a powerful and efficient system that enables lightweight concurrency through goroutines.
 In this blog, we explored its evolution—from the primitive model to the GMP architecture—and key components like goroutine creation, preemption, syscall handling, and netpoll integration.
 
-Hope you will find this knowledge useful in writing more efficient and reliable Go programs.
+Hope you will find this knowledge useful in writing more efficient and reliable Go programs! 😄
 
 ## References
 
