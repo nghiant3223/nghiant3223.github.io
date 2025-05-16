@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-16T16:06:58+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-16T22:12:06+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button>
 <button id="scrollBottom" title="Go to bottom">↓</button></p>
 
 <h1 id="go-scheduler">Go Scheduler</h1>
@@ -40,12 +40,12 @@ If you’re new to these concepts, consider reviewing them before continuing.</p
 <p>Go, introduced in 2009, has steadily grown in popularity as a programming language for building concurrent applications.
 It is designed to be simple, efficient, and easy to use, with a focus on concurrency programming.</p>
 
-<p>Go’s concurrency model is built around the concept goroutines, which are lightweight user threads managed by the Go runtime on user space.
-Go offers useful primitives for synchronization, such as channels and mutexes, to help developers write concurrent code easily.
-Go also uses non-trivial techniques to make I/O bound programs efficient.</p>
+<p>Go’s concurrency model is built around the concept of goroutines, which are lightweight user threads managed by the Go runtime on user space.
+Go offers useful primitives for synchronization, such as channels, to help developers write concurrent code easily.
+It also uses non-trivial techniques to make I/O bound programs efficient.</p>
 
 <p>Understanding the Go scheduler is crucial for Go programmer to write efficient concurrent programs.
-It also helps us better at troubleshooting performance issues or tuning the performance of your Go programs.
+It also helps us become better at troubleshooting performance issues or tuning the performance of our Go programs.
 In this post, we will explore how Go scheduler evolved over time, and how the Go code we write happens under the hood.</p>
 
 <h2 id="compilation-and-go-runtime">Compilation and Go Runtime</h2>

@@ -43,12 +43,12 @@ Feel free to correct me or give suggestions in the comment section 😄.
 Go, introduced in 2009, has steadily grown in popularity as a programming language for building concurrent applications.
 It is designed to be simple, efficient, and easy to use, with a focus on concurrency programming.
 
-Go's concurrency model is built around the concept goroutines, which are lightweight user threads managed by the Go runtime on user space.
-Go offers useful primitives for synchronization, such as channels and mutexes, to help developers write concurrent code easily.
-Go also uses non-trivial techniques to make I/O bound programs efficient.
+Go's concurrency model is built around the concept of goroutines, which are lightweight user threads managed by the Go runtime on user space.
+Go offers useful primitives for synchronization, such as channels, to help developers write concurrent code easily.
+It also uses non-trivial techniques to make I/O bound programs efficient.
 
 Understanding the Go scheduler is crucial for Go programmer to write efficient concurrent programs.
-It also helps us better at troubleshooting performance issues or tuning the performance of your Go programs.
+It also helps us become better at troubleshooting performance issues or tuning the performance of our Go programs.
 In this post, we will explore how Go scheduler evolved over time, and how the Go code we write happens under the hood.
 
 ## Compilation and Go Runtime
