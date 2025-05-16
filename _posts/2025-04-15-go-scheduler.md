@@ -605,7 +605,7 @@ Yes, you didn't read that wrong. According to the [Linux manual page](https://ma
 The signal is `SIGURG`, and the reason it being chosen is described [here](https://github.com/golang/go/blob/go1.24.0/src/runtime/signal_unix.go#L43-L73).
 
 Upon receiving `SIGURG`, the execution of the program is transferred to the signal handler, registered by a call of [`initsig`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L1879-L1879) function upon thread initialization.
-Note that the signal handler can run concurrently with goroutines or the scheduling, as depicted in the figure below.
+Note that the signal handler can run concurrently with goroutine code or the scheduler code, as depicted in the figure below.
 The execution switch from main program to signal handler is triggered by the kernel<a href="https://stackoverflow.com/questions/6949025/how-are-asynchronous-signal-handlers-executed-on-linux/"><sup>4,</sup></a><a href="https://unix.stackexchange.com/questions/733013/how-is-a-signal-delivered-in-linux"><sup>5</sup></a>.
 
 | <img src="/assets/2025-03-11-go-scheduling/signal_delivery_and_handler_execution.png" width=500 /> | 
@@ -613,7 +613,7 @@ The execution switch from main program to signal handler is triggered by the ker
 |            Signal delivery and handler execution<sup><a href="#references">6</a></sup>             |
 
 In the signal handler, the program counter is set to the [`asyncPreempt`](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt.go#L295-L299) function, allowing the goroutine to be suspended and creating space for preemption.
-[`asyncPreempt`](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt_arm64.s) function, which is implemented in assembly, saves the goroutine's registers and call [`asyncPreempt2`](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt.go#L302-L311) function at line [47](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt_arm64.s#L47).
+In the assembly implementation of [`asyncPreempt`](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt_arm64.s) function, it saves the goroutine's registers and call [`asyncPreempt2`](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt.go#L302-L311) function at line [47](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt_arm64.s#L47).
 That is reason for the appearance of `runtime.asyncPreempt:47` in the visualization.
 In [`asyncPreempt2`](https://github.com/golang/go/blob/go1.24.0/src/runtime/preempt.go#L302-L311), the goroutine `g0` of thread `M` will enter [`gopreempt_m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L4191-L4193) to disassociate goroutine `G` from `M` and enqueue `G` into the global run queue.
 The thread then continues with the [schedule loop](#schedule-loop), finding another runnable goroutine and execute it.
