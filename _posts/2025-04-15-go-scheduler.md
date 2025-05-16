@@ -493,7 +493,7 @@ After `netpoll` returns, `M` re-enters the [schedule loop](#schedule-loop) to se
 
 The previous two behaviors of [`findRunnable`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3267-L3646) allows the Go scheduler to wake up asleep goroutines, allowing the program to continue executing.
 They explain why every goroutine including the main one has chance to run after falling asleep.
-Let's see how it works in another post 😄.
+Let's see how the following Go program works in another post 😄.
 
 ```go
 package main

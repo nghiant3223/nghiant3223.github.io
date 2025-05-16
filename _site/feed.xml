@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-16T15:57:27+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-16T16:01:20+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button>
 <button id="scrollBottom" title="Go to bottom">↓</button></p>
 
 <h1 id="go-scheduler">Go Scheduler</h1>
@@ -659,7 +659,7 @@ After <code class="language-plaintext highlighter-rouge">netpoll</code> returns,
 
 <p>The previous two behaviors of <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3267-L3646"><code class="language-plaintext highlighter-rouge">findRunnable</code></a> allows the Go scheduler to wake up asleep goroutines, allowing the program to continue executing.
 They explain why every goroutine including the main one has chance to run after falling asleep.
-Let’s see how it works in another post 😄.</p>
+Let’s see how the following Go program works in another post 😄.</p>
 
 <div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">package</span> <span class="n">main</span>
 
