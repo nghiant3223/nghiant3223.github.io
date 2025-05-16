@@ -150,7 +150,7 @@ Therefore, making child goroutine run on the same thread as its parent goroutine
 
 Thirdly, as Go's been using [Thread-caching Malloc](https://google.github.io/tcmalloc/design.html), every thread `M` has a thread-local cache `mcache` so that it can use for allocation or to hold free memory.
 While `mcache` is only used by `M`s executing Go code, it is even attached with `M`s blocking in a system call, which don't use `mcache` at all.
-An `mcache` can take up to 2MB of memory, and it is not freed until the thread `M` is destroyed.
+An `mcache` can take up to 2MB of memory, and it is not freed until thread `M` is destroyed.
 Because the ratio between `M`s running Go code and all `M`s can be as high as 1:100 (too many threads are blocking in system call), this could lead to excessive resource consumption and poor data locality.
 
 ## Scheduler Enhancement
@@ -179,7 +179,7 @@ However, with a large number of blocked threads, scanning all of them to find a 
 ### Proposal 2: Introduction of Logical Processor
 
 This proposal is described in [Scalable Go Scheduler Design](https://docs.google.com/document/d/1TTj4T2JO42uD5ID9e89oa0sLKhJYD0Y_kqxDv3I3XMw), where the notion of *logical* processor `P` is introduced.
-By *logical*, it means that `P` pretends to execute goroutine code, but in practice, it is the thread `M` associated with `P` that actually performs the execution.
+By *logical*, it means that `P` pretends to execute goroutine code, but in practice, it is thread `M` associated with `P` that actually performs the execution.
 Thread's local run queue and `mcache` are now owned by `P`.
 
 This proposal effectively addresses open issues in the last section.
@@ -451,7 +451,7 @@ That's how the process can exit and the reason why the main goroutine doesn't wa
 It is the thread `M`'s responsibility to find a suitable runnable goroutine so that goroutine starvation can be minimized.
 This logic is implemented in the [`findRunnable`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3267-L3646), which is called by the [schedule loop](#schedule-loop).
 
-The thread `M` looks for a runnable goroutine the following order, stopping the chain if it finds one:
+Thread `M` looks for a runnable goroutine the following order, stopping the chain if it finds one:
 1. Check [trace reader](https://go.dev/blog/execution-traces-2024#trace-reader-api) goroutine's availability (used in [Non-cooperative Preemption](#non-cooperative-preemption) section).
 2. Check garbage collection worker goroutine's availability (described in [Garbage Collector](#garbage-collector) section).
 3. 1/61 of the time, check the global run queue.
@@ -487,7 +487,7 @@ On the last attempt, it first tries to steal from `P1`'s `runnext` slot—if ava
 Note that [`findRunnable`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3267-L3646) not only finds a runnable goroutine but also wakes up goroutine that went into sleep before step 1 happens.
 Once the goroutine wakes up, it'll be put into the local run queue of the processor `P` that was executing it, waiting to be picked up and executed by some thread `M`.
 
-If no goroutine is found after step 9, the thread `M` waits on `netpoll` until the nearest [timer](https://github.com/golang/go/blob/go1.24.0/src/runtime/time.go#L35-L107) expires—such as when a goroutine wakes up from sleep (since sleeping in Go internally creates a timer).
+If no goroutine is found after step 9, thread `M` waits on `netpoll` until the nearest [timer](https://github.com/golang/go/blob/go1.24.0/src/runtime/time.go#L35-L107) expires—such as when a goroutine wakes up from sleep (since sleeping in Go internally creates a timer).
 Why is `netpoll` involved with timers? This is because Go's timer system heavily relies on `netpoll`, as noted in [this](https://github.com/golang/go/blob/go1.24.0/src/runtime/time.go#L427-L427) code comment.
 After `netpoll` returns, `M` re-enters the [schedule loop](#schedule-loop) to search for a runnable goroutine again.
 
@@ -985,7 +985,7 @@ func gopark(unlockf func(*g, unsafe.Pointer) bool, ...) {
 Inside [`releasem`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime1.go#L612-L619) function, the goroutine's [`stackguard0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L405-L405) is set to [`stackPreempt`](https://github.com/golang/go/blob/go1.24.0/src/runtime/stack.go#L128-L130) to trigger an eventual cooperative preemption.
 The control is then transferred to the [`g0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L529) system goroutine, which belongs to the same thread currently running the goroutine, to invoke the [`park_m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L4089-L4142) function.
 
-Inside [`park_m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L4089-L4142), the goroutine state is set to *waiting* and the association between the goroutine and the thread `M` is dropped.
+Inside [`park_m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L4089-L4142), the goroutine state is set to *waiting* and the association between the goroutine and thread `M` is dropped.
 Additionally, [`gopark`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L390-L436) receives an `unlockf` callback function, which is executed in [`park_m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L4089-L4142).
 If `unlockf` returns `false`, the parked goroutine is immediately made runnable again and rescheduled on the same thread `M` using [`execute`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L3221-L3265).
 Otherwise, `M` enters the [schedule loop](#schedule-loop) to pick a goroutine and execute it.
