@@ -553,8 +553,8 @@ The actions that trigger state transitions will be described along the post.</p>
 
 <h3 id="processor-p">Processor: <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L632-L757"><code class="language-plaintext highlighter-rouge">p</code></a></h3>
 
-<p><code class="language-plaintext highlighter-rouge">p</code> struct conceptually represents a physical processor to execute goroutines.
-Instances of <code class="language-plaintext highlighter-rouge">p</code> are called <code class="language-plaintext highlighter-rouge">P</code>, and they are created during the program’s bootstrap phase.
+<p><a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L632-L757"><code class="language-plaintext highlighter-rouge">p</code></a> struct conceptually represents a physical processor to execute goroutines.
+Instances of <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L632-L757"><code class="language-plaintext highlighter-rouge">p</code></a> are called <code class="language-plaintext highlighter-rouge">P</code>, and they are created during the program’s bootstrap phase.
 While the number of threads created could be large (<a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L827-L827">10000</a> in Go 1.24), the number of processors is usually small and determined by the <a href="https://pkg.go.dev/runtime#GOMAXPROCS"><code class="language-plaintext highlighter-rouge">GOMAXPROCS</code></a>.
 There are exactly <a href="https://pkg.go.dev/runtime#GOMAXPROCS"><code class="language-plaintext highlighter-rouge">GOMAXPROCS</code></a> processors, regardless of its state.</p>
 

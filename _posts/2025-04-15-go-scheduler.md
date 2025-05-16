@@ -262,8 +262,8 @@ The actions that trigger state transitions will be described along the post.
 
 ### Processor: [`p`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L632-L757)
 
-`p` struct conceptually represents a physical processor to execute goroutines.
-Instances of `p` are called `P`, and they are created during the program's bootstrap phase.
+[`p`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L632-L757) struct conceptually represents a physical processor to execute goroutines.
+Instances of [`p`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L632-L757) are called `P`, and they are created during the program's bootstrap phase.
 While the number of threads created could be large ([10000](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L827-L827) in Go 1.24), the number of processors is usually small and determined by the [`GOMAXPROCS`](https://pkg.go.dev/runtime#GOMAXPROCS).
 There are exactly [`GOMAXPROCS`](https://pkg.go.dev/runtime#GOMAXPROCS) processors, regardless of its state.
 
