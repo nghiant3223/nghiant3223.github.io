@@ -441,7 +441,7 @@ graph LR
     </tbody>
 </table>
 
-But if main thread is stuck in the scheduling loop, how can the process exit?
+But if the main thread is stuck in schedule loop, how can the process exit?
 Just take a look at the [`main`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L307-L307) function in Go runtime, which is executed by main goroutine.
 After [`main_main`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L134-L135)—alias of the `main` function that Go programmers write—returns, [`exit`](https://man7.org/linux/man-pages/man3/exit.3.html) system call is invoked to terminate the process.
 That's how the process can exit and the reason why the main goroutine doesn't wait for goroutines spawned by `go` keyword.
