@@ -283,9 +283,9 @@ Each `P` instance also maintains references to some memory management data struc
 [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) serves as the front-end in [Thread-Caching Malloc](https://google.github.io/tcmalloc/design.html) model and is used by `P` to allocate micro and small objects.
 [`pageCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagecache.go#L14-L22), on the other hand, enables the memory allocator to fetch memory pages without acquiring the [heap lock](https://www.ibm.com/docs/en/sdk-java-technology/8?topic=management-heap-allocation#the-allocator), thereby improving performance under high concurrency.
 
-In order for a Go program to work well with [sleeps](https://pkg.go.dev/time#Sleep), [timeouts](https://pkg.go.dev/time#After) or [intervals](https://pkg.go.dev/time#Tick), `P` also manages timers implemented by [min-heap](https://en.wikipedia.org/wiki/Heap_(data_structure)) data structure.
+In order for a Go program to work well with [sleeps](https://pkg.go.dev/time#Sleep), [timeouts](https://pkg.go.dev/time#After) or [intervals](https://pkg.go.dev/time#Tick), `P` also manages timers implemented by [min-heap](https://en.wikipedia.org/wiki/Heap_(data_structure)) data structure, where the nearest timer is at the top of the heap.
 When looking for a runnable goroutine, `P` also checks if there are any timers that have expired.
-If so, `P` adds the corresponding goroutine with timer to `P`'s local run queue, waking up the goroutine.
+If so, `P` adds the corresponding goroutine with timer to its local run queue, giving chance for the goroutine to run.
 
 The figure and table below described the state machine of processors in the GMP model.
 Some states and transitions are omitted for simplicity.
