@@ -1021,7 +1021,7 @@ flowchart LR
         check_idle_m ==> |No|newm["newm()"]
         newm ==> newm1["newm1()"]
         newm1 ==> newosproc["newosproc()"]
-        newosproc ==> clone["clone() with entry point mstart, result in M2 thread"]
+        newosproc ==> clone["clone() with entry point mstart, results in M2 thread"]
         clone ==> _end
     end
 
