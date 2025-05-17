@@ -16,7 +16,7 @@ image: https://raw.githubusercontent.com/nghiant3223/nghiant3223.github.io/refs/
 * [Scheduler Enhancement](#scheduler-enhancement)
 * [GMP Model](#gmp-model)
 * [Program Bootstrap](#program-bootstrap)
-* [Creating Goroutine](#creating-goroutine)
+* [Creating a Goroutine](#creating-goroutine)
 * [Schedule Loop](#schedule-loop)
 * [Finding a Runnable Goroutine](#finding-a-runnable-goroutine)
 * [Goroutine Preemption](#goroutine-preemption)
@@ -345,7 +345,7 @@ While the main thread `M0` is associated with processor `P0` to execute main gor
 |:----------------------------------------------------------------------------:|
 |                        Program bootstrap in GMP model                        |
 
-## Creating Goroutine
+## Creating a Goroutine
 
 Go offers us a simple API to start a concurrent execution unit: `go func() { ... } ()`.
 Under the hood, Go runtime does a lot complicated work to make it happen.

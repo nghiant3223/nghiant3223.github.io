@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-17T09:28:56+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-17T09:54:01+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button>
 <button id="scrollBottom" title="Go to bottom">↓</button></p>
 
 <h1 id="go-scheduler">Go Scheduler</h1>
@@ -10,7 +10,7 @@
   <li><a href="#scheduler-enhancement">Scheduler Enhancement</a></li>
   <li><a href="#gmp-model">GMP Model</a></li>
   <li><a href="#program-bootstrap">Program Bootstrap</a></li>
-  <li><a href="#creating-goroutine">Creating Goroutine</a></li>
+  <li><a href="#creating-goroutine">Creating a Goroutine</a></li>
   <li><a href="#schedule-loop">Schedule Loop</a></li>
   <li><a href="#finding-a-runnable-goroutine">Finding a Runnable Goroutine</a></li>
   <li><a href="#goroutine-preemption">Goroutine Preemption</a></li>
@@ -500,7 +500,7 @@ While the main thread <code class="language-plaintext highlighter-rouge">M0</cod
   </tbody>
 </table>
 
-<h2 id="creating-goroutine">Creating Goroutine</h2>
+<h2 id="creating-a-goroutine">Creating a Goroutine</h2>
 
 <p>Go offers us a simple API to start a concurrent execution unit: <code class="language-plaintext highlighter-rouge">go func() { ... } ()</code>.
 Under the hood, Go runtime does a lot complicated work to make it happen.
