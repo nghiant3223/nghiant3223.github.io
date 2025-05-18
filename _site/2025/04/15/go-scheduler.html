@@ -1530,9 +1530,15 @@ It also allows Go programmers to tune the scheduler and other components like ga
 
 <h3 id="gomaxprocs"><a href="https://pkg.go.dev/runtime#GOMAXPROCS"><code class="language-plaintext highlighter-rouge">GOMAXPROCS</code></a></h3>
 
-<p>This function sets the maximum number of processors <code class="language-plaintext highlighter-rouge">P</code> in Go runtime, thus controlling the level of parallelism in a Go program.
-Some I/O bound programs may benefit from a higher number of processors <code class="language-plaintext highlighter-rouge">P</code> than the default.
-For example, <a href="https://github.com/hypermodeinc/dgraph/blob/v24.1.2/dgraph/main.go#L36">Dgraph</a> database hardcodes <a href="https://pkg.go.dev/runtime#GOMAXPROCS"><code class="language-plaintext highlighter-rouge">GOMAXPROCS</code></a> to 128.</p>
+<p>This function sets the number of processors <code class="language-plaintext highlighter-rouge">P</code> in Go runtime, thus controlling the level of parallelism in a Go program.
+The default value of <a href="https://pkg.go.dev/runtime#GOMAXPROCS"><code class="language-plaintext highlighter-rouge">GOMAXPROCS</code></a> is the value of <a href="https://pkg.go.dev/runtime#NumCPU"><code class="language-plaintext highlighter-rouge">runtime.NumCPU</code></a> function, which queries the operating system CPU allocation for the Go process.</p>
+
+<p><a href="https://pkg.go.dev/runtime#GOMAXPROCS"><code class="language-plaintext highlighter-rouge">GOMAXPROCS</code></a>’s default value can be problematic, particularly in containerized environments, as described in <a href="https://dev.to/rdforte/the-implications-of-running-go-in-a-containerised-environment-3bp1">this</a> awesome post.
+There is an ongoing proposal to make <a href="https://pkg.go.dev/runtime#GOMAXPROCS"><code class="language-plaintext highlighter-rouge">GOMAXPROCS</code></a> respect CPU cgroup quota limits, improving its behavior in such environments.
+In future versions of Go, <a href="https://pkg.go.dev/runtime#GOMAXPROCS"><code class="language-plaintext highlighter-rouge">GOMAXPROCS</code></a> may become obsolete, as noted in the official documentation: <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/debug.go#L15-L15">“This call will go away when the scheduler improves.”</a></p>
+
+<p>Some I/O bound programs may benefit from a higher number of processors <code class="language-plaintext highlighter-rouge">P</code> than the default.
+For example, <a href="https://github.com/hypermodeinc/dgraph/blob/v24.1.2/dgraph/main.go#L36">Dgraph</a> database hardcodes <a href="https://pkg.go.dev/runtime#GOMAXPROCS"><code class="language-plaintext highlighter-rouge">GOMAXPROCS</code></a> to 128 to allow more I/O operations to be scheduled.</p>
 
 <h3 id="goexit"><a href="https://pkg.go.dev/runtime#Goexit"><code class="language-plaintext highlighter-rouge">Goexit</code></a></h3>
 

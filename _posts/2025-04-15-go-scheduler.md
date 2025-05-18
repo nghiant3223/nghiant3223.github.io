@@ -1066,9 +1066,15 @@ It also allows Go programmers to tune the scheduler and other components like ga
 
 ### [`GOMAXPROCS`](https://pkg.go.dev/runtime#GOMAXPROCS)
 
-This function sets the maximum number of processors `P` in Go runtime, thus controlling the level of parallelism in a Go program.
+This function sets the number of processors `P` in Go runtime, thus controlling the level of parallelism in a Go program.
+The default value of [`GOMAXPROCS`](https://pkg.go.dev/runtime#GOMAXPROCS) is the value of [`runtime.NumCPU`](https://pkg.go.dev/runtime#NumCPU) function, which queries the operating system CPU allocation for the Go process.
+
+[`GOMAXPROCS`](https://pkg.go.dev/runtime#GOMAXPROCS)'s default value can be problematic, particularly in containerized environments, as described in [this](https://dev.to/rdforte/the-implications-of-running-go-in-a-containerised-environment-3bp1) awesome post.
+There is an ongoing proposal to make [`GOMAXPROCS`](https://pkg.go.dev/runtime#GOMAXPROCS) respect CPU cgroup quota limits, improving its behavior in such environments.
+In future versions of Go, [`GOMAXPROCS`](https://pkg.go.dev/runtime#GOMAXPROCS) may become obsolete, as noted in the official documentation: ["This call will go away when the scheduler improves."](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/debug.go#L15-L15)
+
 Some I/O bound programs may benefit from a higher number of processors `P` than the default.
-For example, [Dgraph](https://github.com/hypermodeinc/dgraph/blob/v24.1.2/dgraph/main.go#L36) database hardcodes [`GOMAXPROCS`](https://pkg.go.dev/runtime#GOMAXPROCS) to 128.
+For example, [Dgraph](https://github.com/hypermodeinc/dgraph/blob/v24.1.2/dgraph/main.go#L36) database hardcodes [`GOMAXPROCS`](https://pkg.go.dev/runtime#GOMAXPROCS) to 128 to allow more I/O operations to be scheduled.
 
 ### [`Goexit`](https://pkg.go.dev/runtime#Goexit)
 
