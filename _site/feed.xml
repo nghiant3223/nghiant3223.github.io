@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-18T22:56:00+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-19T21:25:41+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button>
 <button id="scrollBottom" title="Go to bottom">↓</button></p>
 
 <h1 id="go-scheduler">Go Scheduler</h1>
@@ -164,7 +164,7 @@ The scheduler—running on every thread <code class="language-plaintext highligh
   </tbody>
 </table>
 
-<p>Nowadays, Go is famous for its performant concurrency model. 
+<p>Nowadays, Go is well-known for its performant concurrency model.
 But that’s not the case for the early Go.
 Dmitry Vyukov—a Go contributor—pointed out multiple issues with this implementation in his famous <a href="https://docs.google.com/document/d/1TTj4T2JO42uD5ID9e89oa0sLKhJYD0Y_kqxDv3I3XMw">Scalable Go Scheduler Design</a>: “In general, the scheduler may inhibit users from using idiomatic fine-grained concurrency where performance is critical.”
 Let me explain in more detail what he meant.</p>
@@ -331,7 +331,7 @@ When <code class="language-plaintext highlighter-rouge">M</code> has nothing to 
 
 <p>The figure and table below described the state machine of threads in the GMP model.
 Some states and transitions are omitted for simplicity.
-<em>Spinning</em> is a substate of <em>running</em>, in which thread consumes CPU cycles to solely execute Go runtime code that steals goroutine.
+<em>Spinning</em> is a substate of <em>idle</em>, in which thread consumes CPU cycles to solely execute Go runtime code that steals goroutine.
 The actions that trigger state transitions will be described along the post.</p>
 
 <table>

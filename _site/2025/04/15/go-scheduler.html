@@ -341,7 +341,7 @@ The scheduler—running on every thread <code class="language-plaintext highligh
   </tbody>
 </table>
 
-<p>Nowadays, Go is famous for its performant concurrency model. 
+<p>Nowadays, Go is well-known for its performant concurrency model.
 But that’s not the case for the early Go.
 Dmitry Vyukov—a Go contributor—pointed out multiple issues with this implementation in his famous <a href="https://docs.google.com/document/d/1TTj4T2JO42uD5ID9e89oa0sLKhJYD0Y_kqxDv3I3XMw">Scalable Go Scheduler Design</a>: “In general, the scheduler may inhibit users from using idiomatic fine-grained concurrency where performance is critical.”
 Let me explain in more detail what he meant.</p>
@@ -508,7 +508,7 @@ When <code class="language-plaintext highlighter-rouge">M</code> has nothing to 
 
 <p>The figure and table below described the state machine of threads in the GMP model.
 Some states and transitions are omitted for simplicity.
-<em>Spinning</em> is a substate of <em>running</em>, in which thread consumes CPU cycles to solely execute Go runtime code that steals goroutine.
+<em>Spinning</em> is a substate of <em>idle</em>, in which thread consumes CPU cycles to solely execute Go runtime code that steals goroutine.
 The actions that trigger state transitions will be described along the post.</p>
 
 <table>
