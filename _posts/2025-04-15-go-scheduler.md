@@ -133,8 +133,8 @@ The scheduler—running on every thread `M`—was responsible for selecting a go
 |                            Go's primitive scheduler                            |
 
 Nowadays, Go is well-known for its performant concurrency model.
-But that's not the case for the early Go.
-Dmitry Vyukov—a Go contributor—pointed out multiple issues with this implementation in his famous [Scalable Go Scheduler Design](https://docs.google.com/document/d/1TTj4T2JO42uD5ID9e89oa0sLKhJYD0Y_kqxDv3I3XMw): "In general, the scheduler may inhibit users from using idiomatic fine-grained concurrency where performance is critical."
+Unfortunately, that's not the case for the early Go.
+Dmitry Vyukov—one of the key Go contributors—pointed out multiple issues with this implementation in his famous [Scalable Go Scheduler Design](https://docs.google.com/document/d/1TTj4T2JO42uD5ID9e89oa0sLKhJYD0Y_kqxDv3I3XMw): "In general, the scheduler may inhibit users from using idiomatic fine-grained concurrency where performance is critical."
 Let me explain in more detail what he meant.
 
 Firstly, the global run queue was a bottleneck for performance.
