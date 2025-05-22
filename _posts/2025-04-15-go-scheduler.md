@@ -25,7 +25,7 @@ image: https://raw.githubusercontent.com/nghiant3223/nghiant3223.github.io/refs/
 * [How netpoll Works](#how-netpoll-works)
 * [Garbage Collector](#garbage-collector)
 * [Common Functions](#common-functions)
-* [Runtime APIs](#runtime-apis)
+* [Go Runtime APIs](#go-runtime-apis)
 
 ## Disclaimer
 
@@ -1059,7 +1059,7 @@ This is achieved by [`futex`](https://linux.die.net/man/2/futex) system call, ma
 `P` will be associated with `M1` to make progress by calling [`startm`](#start-thread-startm) under certain conditions: if the global run queue is not empty, if its local run queue is not empty, if there is tracing work or garbage collection work to do, or if no thread is currently handling netpoll.
 If none of these conditions is met, `P` is returned to the processor idle list.
 
-## Runtime APIs
+## Go Runtime APIs
 
 Go runtime provides several APIs to interact with the scheduler and goroutines.
 It also allows Go programmers to tune the scheduler and other components like garbage collector for their application specific needs.
