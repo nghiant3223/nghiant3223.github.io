@@ -876,7 +876,7 @@ As [`epoll`]((https://man7.org/linux/man-pages/man7/epoll.7.html)) monitors file
 It holds a reference to a [`runtime.pollDesc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/netpoll.go#L72-L115) indirectly via [`poll.pollDesc`](https://github.com/golang/go/blob/go1.24.0/src/internal/poll/fd_poll_runtime.go#L32-L34), which is simply a wrapper.
 
 > ⚠️ Go does have problem with a single `epoll` instance as described in [this](https://github.com/golang/go/issues/65064) open issue.
-> There are discussions [whether Go should use a single or multiple `epoll` instances](https://github.com/golang/go/issues/65064#issuecomment-1896633168), or even [use another I/O multiplexing model like `io_uring`](https://github.com/golang/go/issues/65064#issuecomment-1896633168).
+> There are discussions [whether Go should use a single or multiple `epoll` instances](https://github.com/golang/go/issues/65064#issuecomment-1896633168), or even [use another I/O multiplexing model like `io_uring`](https://github.com/golang/go/issues/31908).
 
 Building on the success of this model for network I/O, Go also leverages [`epoll`](https://man7.org/linux/man-pages/man7/epoll.7.html) for file I/O.
 Once a file is opened, [`syscall.SetNonblock`](https://github.com/golang/go/blob/go1.24.0/src/os/file_unix.go#L222-L222) function is called to enable non-blocking mode for the file descriptor.
