@@ -3,22 +3,22 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Memory Allocation and Garbage Collection in Go | Melatoni</title>
+<title>Memory Management in Go | Melatoni</title>
 <meta name="generator" content="Jekyll v3.10.0" />
-<meta property="og:title" content="Memory Allocation and Garbage Collection in Go" />
+<meta property="og:title" content="Memory Management in Go" />
 <meta name="author" content="nghiant3223@gmail.com" />
 <meta property="og:locale" content="en_US" />
-<meta name="description" content="Mention page table to map virtual pages to physical frames (read “OS Concepts” book)." />
-<meta property="og:description" content="Mention page table to map virtual pages to physical frames (read “OS Concepts” book)." />
+<meta name="description" content="Memory Allocation" />
+<meta property="og:description" content="Memory Allocation" />
 <link rel="canonical" href="http://localhost:4000/2025/06/03/memory_management_in_go.html" />
 <meta property="og:url" content="http://localhost:4000/2025/06/03/memory_management_in_go.html" />
 <meta property="og:site_name" content="Melatoni" />
 <meta property="og:type" content="article" />
 <meta property="article:published_time" content="2025-06-03T00:00:00+07:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Memory Allocation and Garbage Collection in Go" />
+<meta property="twitter:title" content="Memory Management in Go" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"nghiant3223@gmail.com"},"dateModified":"2025-06-03T00:00:00+07:00","datePublished":"2025-06-03T00:00:00+07:00","description":"Mention page table to map virtual pages to physical frames (read “OS Concepts” book).","headline":"Memory Allocation and Garbage Collection in Go","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2025/06/03/memory_management_in_go.html"},"url":"http://localhost:4000/2025/06/03/memory_management_in_go.html"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"nghiant3223@gmail.com"},"dateModified":"2025-06-03T00:00:00+07:00","datePublished":"2025-06-03T00:00:00+07:00","description":"Memory Allocation","headline":"Memory Management in Go","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2025/06/03/memory_management_in_go.html"},"url":"http://localhost:4000/2025/06/03/memory_management_in_go.html"}</script>
 <!-- End Jekyll SEO tag -->
 <link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="Melatoni" /></head>
 <body><style>
@@ -173,9 +173,14 @@
     });
 </script>
 
+<h2 id="memory-allocation">Memory Allocation</h2>
+
 <p>Mention page table to map virtual pages to physical frames (read “OS Concepts” book).</p>
 
 <p>Mention first-fit, best-fit, and segregated-fit algorithms for memory allocation (read https://www.cs.cmu.edu/afs/cs/academic/class/15213-f09/www/lectures/17-dyn-mem.pdf).</p>
+
+<p>Mention that there is still memory fragmentation in Go, as specified in:
+https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/sizeclasses.go#L90-L90</p>
 
 <p>Mention process memory layout: text, data, heap, stack, mmap regions (read “OS Concepts” book and online resource).</p>
 
@@ -194,9 +199,102 @@ Go’s heap is allocated using <code class="language-plaintext highlighter-rouge
 <p>Read https://www.bytelab.codes/what-is-memory-part-3-registers-stacks-and-threads
 In stack section, mention %rsp register (if it’s relevant to the discussion).</p>
 
-<p>In GC section, mentions that if a goroutine is allocating to much memory, it will be used to assist the GC with mark phase.
+<h2 id="garbage-collection">Garbage Collection</h2>
+
+<p>Sources:</p>
+<ul>
+  <li>https://www.sobyte.net/post/2022-04/go-gc/</li>
+</ul>
+
+<p>Explain that Go GC uses tri-color mark-and-sweep algorithm. Also explain what write barrier is and how it helps the algorithm.
+See: https://www.notion.so/nghiant3223/Tri-color-Mark-Sweep-GC-20758cf2502e80d087a2c700988767b2
+Mention that write barrier could slow down the program.
+See: https://ihagopian.com/posts/write-barriers-in-the-go-garbage-collector</p>
+
+<p>Explain why there are 3 colors in tri-color mark-and-sweep algorithm: white, gray, and black.
+See: https://blog.stackademic.com/basics-of-golang-gc-explained-tri-color-mark-and-sweep-and-stop-the-world-cc832f99164c.</p>
+
+<p>Explain what STW and why it is needed in Go’s GC. Also explain why it is not a problem for Go’s GC.
+See: https://blog.stackademic.com/basics-of-golang-gc-explained-tri-color-mark-and-sweep-and-stop-the-world-cc832f99164c.
+See: https://www.notion.so/nghiant3223/Garbage-Collector-f5f230cdb1c74db2a1bf94642bfc845a?source=copy_link#d73a04097616425b8d875955af613df4</p>
+
+<p>In GC section, mentions that if a goroutine is allocating too much memory, it will be used to assist the GC with mark phase.
 https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1675-L1680.</p>
 
+<p>Mention that GC’s sweep phase happens when goroutines is allocating more memory, as specified in:
+https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mheap.go#L968-L968</p>
+
+<p>Sweeping is fast because Go keeps track of unused by bitmap.
+That’s why the problem with Go’s GC is not the speed of sweeping, but the speed of marking phase.</p>
+
+<p>Mention that sweepgen increases by 2 every GC cycle.
+https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mgc.go#L1684-L1684
+https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mheap.go#L474-L480</p>
+
+<p>Explain write barrier with this program:</p>
+<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">package</span> <span class="n">main</span>
+
+<span class="k">type</span> <span class="n">Node</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">ID</span>     <span class="kt">int</span>
+	<span class="n">Parent</span> <span class="o">*</span><span class="n">Node</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">New</span><span class="p">()</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
+	<span class="n">child</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">Node</span><span class="p">{}</span>
+	<span class="n">parent</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">Node</span><span class="p">{}</span>
+	<span class="n">child</span><span class="o">.</span><span class="n">Parent</span> <span class="o">=</span> <span class="n">parent</span>
+	<span class="k">return</span> <span class="n">child</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">main</span><span class="p">()</span> <span class="p">{</span>
+	<span class="n">New</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<div class="language-shell highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>go build <span class="nt">-gcflags</span><span class="o">=</span><span class="s2">"all=-l"</span> <span class="nt">-o</span> main main.go
+<span class="nv">$ </span>go tool objdump <span class="nt">-s</span> <span class="s2">"main.New"</span> main
+TEXT main.New<span class="o">(</span>SB<span class="o">)</span> /Users/toninguyen/Workspace/go_playground/runtime/main.go
+  main.go:8		0x100066b40		f9400b90		MOVD 16<span class="o">(</span>R28<span class="o">)</span>, R16
+  main.go:8		0x100066b44		eb3063ff		CMP R16, RSP
+  main.go:8		0x100066b48		54000349		BLS 26<span class="o">(</span>PC<span class="o">)</span>
+  main.go:8		0x100066b4c		f81d0ffe		MOVD.W R30, <span class="nt">-48</span><span class="o">(</span>RSP<span class="o">)</span>
+  main.go:8		0x100066b50		f81f83fd		MOVD R29, <span class="nt">-8</span><span class="o">(</span>RSP<span class="o">)</span>
+  main.go:8		0x100066b54		d10023fd		SUB <span class="nv">$8</span>, RSP, R29
+  main.go:9		0x100066b58		900000c0		ADRP 98304<span class="o">(</span>PC<span class="o">)</span>, R0
+  main.go:9		0x100066b5c		91080000		ADD <span class="nv">$512</span>, R0, R0
+  main.go:9		0x100066b60		97fe915c		CALL runtime.newobject<span class="o">(</span>SB<span class="o">)</span>
+  main.go:9		0x100066b64		f90013e0		MOVD R0, 32<span class="o">(</span>RSP<span class="o">)</span>
+  main.go:10		0x100066b68		900000c0		ADRP 98304<span class="o">(</span>PC<span class="o">)</span>, R0
+  main.go:10		0x100066b6c		91080000		ADD <span class="nv">$512</span>, R0, R0
+  main.go:10		0x100066b70		97fe9158		CALL runtime.newobject<span class="o">(</span>SB<span class="o">)</span>
+  main.go:11		0x100066b74		9000051b		ADRP 655360<span class="o">(</span>PC<span class="o">)</span>, R27
+  main.go:11		0x100066b78		b941b361		MOVWU 432<span class="o">(</span>R27<span class="o">)</span>, R1
+  main.go:11		0x100066b7c		35000061		CBNZW R1, 3<span class="o">(</span>PC<span class="o">)</span>
+  main.go:11		0x100066b80		f94013e1		MOVD 32<span class="o">(</span>RSP<span class="o">)</span>, R1
+  main.go:11		0x100066b84		14000006		JMP 6<span class="o">(</span>PC<span class="o">)</span>
+  main.go:11		0x100066b88		97fff546		CALL runtime.gcWriteBarrier2<span class="o">(</span>SB<span class="o">)</span>
+  main.go:11		0x100066b8c		f9000320		MOVD R0, <span class="o">(</span>R25<span class="o">)</span>
+  main.go:11		0x100066b90		f94013e1		MOVD 32<span class="o">(</span>RSP<span class="o">)</span>, R1
+  main.go:11		0x100066b94		f9400422		MOVD 8<span class="o">(</span>R1<span class="o">)</span>, R2
+  main.go:11		0x100066b98		f9000722		MOVD R2, 8<span class="o">(</span>R25<span class="o">)</span>
+  main.go:11		0x100066b9c		f9000420		MOVD R0, 8<span class="o">(</span>R1<span class="o">)</span>
+  main.go:12		0x100066ba0		aa0103e0		MOVD R1, R0
+  main.go:12		0x100066ba4		a97ffbfd		LDP <span class="nt">-8</span><span class="o">(</span>RSP<span class="o">)</span>, <span class="o">(</span>R29, R30<span class="o">)</span>
+  main.go:12		0x100066ba8		9100c3ff		ADD <span class="nv">$48</span>, RSP, RSP
+  main.go:12		0x100066bac		d65f03c0		RET
+  main.go:8		0x100066bb0		aa1e03e3		MOVD R30, R3
+  main.go:8		0x100066bb4		97ffecaf		CALL runtime.morestack_noctxt.abi0<span class="o">(</span>SB<span class="o">)</span>
+  main.go:8		0x100066bb8		17ffffe2		JMP main.New<span class="o">(</span>SB<span class="o">)</span>
+  main.go:8		0x100066bbc		00000000		?
+</code></pre></div></div>
+
+<p>Mention the pseudocode of write barrier:
+https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mbarrier.go#L24-L36
+writePointer(slot, ptr):
+  shade(*slot)
+  if current stack is grey:
+    shade(ptr)
+  *slot = ptr</p>
 
 
 <script src="https://unpkg.com/medium-zoom@1.1.0/dist/medium-zoom.min.js"></script>
