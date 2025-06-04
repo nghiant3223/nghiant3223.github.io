@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Memory Allocation and Garbage Collection in Go | Melatoni</title>
+<meta name="generator" content="Jekyll v3.10.0" />
+<meta property="og:title" content="Memory Allocation and Garbage Collection in Go" />
+<meta name="author" content="nghiant3223@gmail.com" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Mention page table to map virtual pages to physical frames (read “OS Concepts” book)." />
+<meta property="og:description" content="Mention page table to map virtual pages to physical frames (read “OS Concepts” book)." />
+<link rel="canonical" href="http://localhost:4000/2025/06/03/memory_management_in_go.html" />
+<meta property="og:url" content="http://localhost:4000/2025/06/03/memory_management_in_go.html" />
+<meta property="og:site_name" content="Melatoni" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2025-06-03T00:00:00+07:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Memory Allocation and Garbage Collection in Go" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"nghiant3223@gmail.com"},"dateModified":"2025-06-03T00:00:00+07:00","datePublished":"2025-06-03T00:00:00+07:00","description":"Mention page table to map virtual pages to physical frames (read “OS Concepts” book).","headline":"Memory Allocation and Garbage Collection in Go","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2025/06/03/memory_management_in_go.html"},"url":"http://localhost:4000/2025/06/03/memory_management_in_go.html"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="Melatoni" /></head>
+<body><style>
+    .blog-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .header-left h1 {
+        margin: 0;
+        font-size: 24px;
+    }
+
+    .header-right a {
+        margin-left: 15px;
+        color: #333;
+    }
+
+    .blog-header a:hover {
+        color: #0077cc;
+    }
+</style>
+
+<header class="site-header" role="banner">
+
+  <div class="wrapper"><div class="blog-header">
+        <div class="header-left">
+            <h1>
+                <a class="site-title" rel="author" href="/">Melatoni</a>
+            </h1>
+        </div>
+        <div class="header-right">
+            <a href="https://github.com/nghiant3223" target="_blank">GitHub</a>
+            <a href="https://www.linkedin.com/in/nghiant3223" target="_blank">LinkedIn</a>
+        </div>
+    </div><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <link rel="stylesheet" href="/assets/fonts/style.css">
+
+<style>
+    body {
+        font-family: 'Minion 3', serif;
+    }
+
+    th {
+        padding: unset !important;
+    }
+
+    table {
+        margin-bottom: 15px;
+    }
+
+    code {
+        font-family: 'Source Code Pro', monospace;
+    }
+
+    blockquote {
+        font-style: normal;
+        letter-spacing: normal;
+    }
+
+    path {
+        stroke-width: 1px !important;
+    }
+
+    #scrollTop {
+        display: none;
+        position: fixed;
+        bottom: 90px;
+        right: 30px;
+        z-index: 100;
+        font-size: 18px;
+        border: none;
+        outline: none;
+        background-color: #333;
+        color: white;
+        cursor: pointer;
+        padding: 8px 14px;
+        border-radius: 50%;
+        transition: background-color 0.3s;
+    }
+
+    #scrollTop:hover {
+        background-color: #555;
+    }
+
+    #scrollBottom {
+        display: none;
+        position: fixed;
+        bottom: 40px;
+        right: 30px;
+        z-index: 100;
+        font-size: 18px;
+        border: none;
+        outline: none;
+        background-color: #333;
+        color: white;
+        cursor: pointer;
+        padding: 8px 14px;
+        border-radius: 50%;
+        transition: background-color 0.3s;
+    }
+
+    #scrollBottom:hover {
+        background-color: #555;
+    }
+
+    .footer-col-3 {
+        text-align: right !important;
+    }
+
+    .giscus {
+        margin-top: 30px;
+        padding-top: 30px;
+        border-top: 1px solid #e8e8e8;
+    }
+</style>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[href^='http']").forEach(function (link) {
+            link.setAttribute("target", "_blank");
+            link.setAttribute("rel", "noopener noreferrer");
+        });
+    });
+</script>
+
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'base',
+        themeVariables: {
+            fontSize: '32px',
+            fontFamily: 'Source Code Pro',
+        }
+    });
+</script>
+
+<p>Mention page table to map virtual pages to physical frames (read “OS Concepts” book).</p>
+
+<p>Mention first-fit, best-fit, and segregated-fit algorithms for memory allocation (read https://www.cs.cmu.edu/afs/cs/academic/class/15213-f09/www/lectures/17-dyn-mem.pdf).</p>
+
+<p>Mention process memory layout: text, data, heap, stack, mmap regions (read “OS Concepts” book and online resource).</p>
+
+<p>Mention RSS and VSZ, how they relate to memory allocation (read “Linux Programming Interface” book).</p>
+
+<p>Mention that <code class="language-plaintext highlighter-rouge">mmap</code> system call just allocates virtual memory in between process stack and heap, Linux uses demand paging, the physical frame is not allocated until the corresponding page is accessed.</p>
+<ul>
+  <li>https://ryanstan.com/linux-demand-paging-anon-memory.html</li>
+  <li>https://www.kernel.org/doc/html/v5.16/admin-guide/mm/concepts.html#anonymous-memory</li>
+  <li>https://stackoverflow.com/questions/60076669/kernel-virtual-memory-space-and-process-virtual-memory-space</li>
+</ul>
+
+<p>Mention that Go’s stack doesn’t relate to the process stack, Go’s heap doesn’t relate to the process heap.
+Go’s heap is allocated using <code class="language-plaintext highlighter-rouge">mmap</code> and is managed by the Go runtime. Go’s stack and heap live in this mapped memory space.</p>
+
+<p>Read https://www.bytelab.codes/what-is-memory-part-3-registers-stacks-and-threads
+In stack section, mention %rsp register (if it’s relevant to the discussion).</p>
+
+<p>In GC section, mentions that if a goroutine is allocating to much memory, it will be used to assist the GC with mark phase.
+https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1675-L1680.</p>
+
+
+
+<script src="https://unpkg.com/medium-zoom@1.1.0/dist/medium-zoom.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        mediumZoom('img'); // Zooms all images
+    });
+</script>
+
+<script>
+    // Show button when scrolling down
+    window.onscroll = function () {
+        const scrollTopBtn = document.getElementById("scrollTop");
+        if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
+            scrollTopBtn.style.display = "block";
+        } else {
+            scrollTopBtn.style.display = "none";
+        }
+
+        const scrollBottomBtn = document.getElementById("scrollBottom");
+        const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+        const windowHeight = window.innerHeight;
+        const docHeight = document.documentElement.scrollHeight;
+
+        // Show button if we're not near the bottom
+        if (docHeight - (scrollTop + windowHeight) > 300) {
+            scrollBottomBtn.style.display = "block";
+        } else {
+            scrollBottomBtn.style.display = "none";
+        }
+    };
+
+    // Scroll to top when button is clicked
+    document.getElementById("scrollTop").addEventListener("click", function () {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    // Scroll to bottom when button is clicked
+    document.getElementById("scrollBottom").addEventListener("click", function () {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    });
+</script>
+
+<script src="https://giscus.app/client.js"
+        data-repo="nghiant3223/nghiant3223.github.io"
+        data-repo-id="R_kgDOJ-uLAQ"
+        data-category="General"
+        data-category-id="DIC_kwDOJ-uLAc4CqGrC"
+        data-mapping="title"
+        data-strict="0"
+        data-reactions-enabled="1"
+        data-emit-metadata="1"
+        data-input-position="top"
+        data-theme="light"
+        data-lang="en"
+        crossorigin="anonymous">
+</script>
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">Melatoni</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">nghiant3223@gmail.com</li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>Writings about software engineering</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

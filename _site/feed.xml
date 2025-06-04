@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-05-21T11:42:57+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-06-04T20:43:36+07:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Melatoni</title><subtitle>Writings about software engineering</subtitle><author><name>nghiant3223@gmail.com</name></author><entry><title type="html">Go Scheduler</title><link href="http://localhost:4000/2025/04/15/go-scheduler.html" rel="alternate" type="text/html" title="Go Scheduler" /><published>2025-04-15T00:00:00+07:00</published><updated>2025-04-15T00:00:00+07:00</updated><id>http://localhost:4000/2025/04/15/go-scheduler</id><content type="html" xml:base="http://localhost:4000/2025/04/15/go-scheduler.html"><![CDATA[<p><button id="scrollTop" title="Go to top">↑</button>
 <button id="scrollBottom" title="Go to bottom">↓</button></p>
 
 <h1 id="go-scheduler">Go Scheduler</h1>
@@ -19,7 +19,7 @@
   <li><a href="#how-netpoll-works">How netpoll Works</a></li>
   <li><a href="#garbage-collector">Garbage Collector</a></li>
   <li><a href="#common-functions">Common Functions</a></li>
-  <li><a href="#runtime-apis">Runtime APIs</a></li>
+  <li><a href="#go-runtime-apis">Go Runtime APIs</a></li>
 </ul>
 
 <h2 id="disclaimer">Disclaimer</h2>
@@ -1143,7 +1143,7 @@ It holds a reference to a <a href="https://github.com/golang/go/blob/go1.24.0/sr
 
 <blockquote>
   <p>⚠️ Go does have problem with a single <code class="language-plaintext highlighter-rouge">epoll</code> instance as described in <a href="https://github.com/golang/go/issues/65064">this</a> open issue.
-There are discussions <a href="https://github.com/golang/go/issues/65064#issuecomment-1896633168">whether Go should use a single or multiple <code class="language-plaintext highlighter-rouge">epoll</code> instances</a>, or even <a href="https://github.com/golang/go/issues/65064#issuecomment-1896633168">use another I/O multiplexing model like <code class="language-plaintext highlighter-rouge">io_uring</code></a>.</p>
+There are discussions <a href="https://github.com/golang/go/issues/65064#issuecomment-1896633168">whether Go should use a single or multiple <code class="language-plaintext highlighter-rouge">epoll</code> instances</a>, or even <a href="https://github.com/golang/go/issues/31908">use another I/O multiplexing model like <code class="language-plaintext highlighter-rouge">io_uring</code></a>.</p>
 </blockquote>
 
 <p>Building on the success of this model for network I/O, Go also leverages <a href="https://man7.org/linux/man-pages/man7/epoll.7.html"><code class="language-plaintext highlighter-rouge">epoll</code></a> for file I/O.
@@ -1346,7 +1346,7 @@ This is achieved by <a href="https://linux.die.net/man/2/futex"><code class="lan
 <code class="language-plaintext highlighter-rouge">P</code> will be associated with <code class="language-plaintext highlighter-rouge">M1</code> to make progress by calling <a href="#start-thread-startm"><code class="language-plaintext highlighter-rouge">startm</code></a> under certain conditions: if the global run queue is not empty, if its local run queue is not empty, if there is tracing work or garbage collection work to do, or if no thread is currently handling netpoll.
 If none of these conditions is met, <code class="language-plaintext highlighter-rouge">P</code> is returned to the processor idle list.</p>
 
-<h2 id="runtime-apis">Runtime APIs</h2>
+<h2 id="go-runtime-apis">Go Runtime APIs</h2>
 
 <p>Go runtime provides several APIs to interact with the scheduler and goroutines.
 It also allows Go programmers to tune the scheduler and other components like garbage collector for their application specific needs.</p>
