@@ -81,6 +81,16 @@ layout: default
         padding-top: 30px;
         border-top: 1px solid #e8e8e8;
     }
+
+    .heading-link {
+        color: inherit;
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+    .heading-link:hover {
+        text-decoration: underline;
+    }
 </style>
 
 <script>
@@ -161,4 +171,18 @@ layout: default
         data-theme="light"
         data-lang="en"
         crossorigin="anonymous">
+</script>
+
+<script>
+    document.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
+        // Wrap content in a link element
+        const link = document.createElement("a");
+        link.href = `#${heading.id}`;
+        link.className = "heading-link";
+        link.innerHTML = heading.innerHTML;
+
+        // Replace heading contents
+        heading.innerHTML = "";
+        heading.appendChild(link);
+    });
 </script>
