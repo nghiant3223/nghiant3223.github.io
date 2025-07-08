@@ -40,7 +40,7 @@ Feel free to correct me or give suggestions in the comment section 😄.
 > ⚠️ This post assumes that you already have a basic understanding of Go concurrency (goroutines, channels, etc.).
 > If you're new to these concepts, consider reviewing them before continuing.
 
-Go, introduced in 2009, has steadily grown in popularity as a programming language for building concurrent applications.
+Go or Golang, introduced in 2009, has steadily grown in popularity as a programming language for building concurrent applications.
 It is designed to be simple, efficient, and easy to use, with a focus on concurrency programming.
 
 Go's concurrency model is built around the concept of goroutines, which are lightweight user threads managed by the Go runtime on user space.
