@@ -345,6 +345,9 @@ While the main thread `M0` is associated with processor `P0` to execute main gor
 |:----------------------------------------------------------------------------:|
 |                        Program bootstrap in GMP model                        |
 
+It's worth to mention that during the bootstrap phase, the runtime also spawns several other goroutines related to memory management, such as sweeping and scavenging.
+However, we'll leave those out of scope for this post. They'll be explored in greater detail in a future article.
+
 ## Creating a Goroutine
 
 Go offers us a simple API to start a concurrent execution unit: `go func() { ... } ()`.
