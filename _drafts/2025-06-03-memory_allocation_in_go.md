@@ -499,6 +499,8 @@ Key Benefits
 
 ===
 
+Mention during program bootstrap, Go runtime also initializes 2 goroutines for sweeping and scavenging.
+
 Mention 1 heap allocation optimization is grouping scalar types into a single struct allocation.
 See: https://github.com/golang/go/commit/ba7b8ca336123017e43a2ab3310fd4a82122ef9d.
 
