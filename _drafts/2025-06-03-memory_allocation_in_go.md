@@ -13,12 +13,14 @@ Sources:
 - https://medium.com/@aditimishra_541/how-go-manages-memory-8123fd11eab9
 - 20.6.3.1 Mapping of Programs into Memory in "OS Concepts" book
 - https://www.youtube.com/watch?v=3uyiGO6a4q
+- https://www.youtube.com/watch?v=S_1YfTfuWmo
+- https://go.googlesource.com/proposal/+/master/design/35112-scaling-the-page-allocator.md
+- https://go.googlesource.com/proposal/+/refs/changes/57/202857/2/design/35112-scaling-the-page-allocator.md
+- https://segmentfault.com/a/1190000041864888/en#item-5
 
-## Fundamental
+## Basics of Main Memory
 
-### Main Memory
-
-#### What and Why?
+### What and Why?
 
 Have you ever wondered why computers need main memory (RAM) when they already have disk storage? The answer lies in access speed.
 While disk storage is permanent, it is much slower than main memory.
@@ -38,7 +40,7 @@ For a program to be executed, it must be mapped to absolute addresses and loaded
 Once loaded, a process—an active execution of a program—accesses program instructions, reads data from and writes data to memory by using these absolute addresses.
 In the same way, for the CPU to process data from disk, those data must first be transferred to main memory by CPU-generated I/O calls.
 
-#### Simple Allocation Strategy
+### Simple Allocation Strategy
 
 Typically, there are multiple processes running on a computer, each with its own memory space allocated in main memory.
 It's the responsibility of the operating system to allocating memory for each process, ensuring that they don't interfere with each other.
@@ -63,7 +65,7 @@ Worst-fit searches the entire memory space and finds the largest block that is l
 First Fit and Best Fit perform better than Worst Fit in time and storage use.
 First Fit is usually faster, though storage efficiency is similar between the two.
 
-#### External Fragmentation
+### External Fragmentation
 
 Unfortunately, this simple allocation strategy can lead to external fragmentation.
 External fragmentation occurs when there is enough total memory to satisfy a request, but the available spaces are not contiguous.
@@ -80,7 +82,7 @@ This is because processes may perform dynamic memory allocation based on user in
 If the allocated memory is not enough, the operating system may need to pause the process, search for a sufficient memory block, and migrate the process to a larger memory block.
 This approach could lead to critical performance issues, thus not realistic.
 
-#### Memory Paging
+### Memory Paging
 
 In practice, operating systems use a more sophisticated memory allocation strategy called *paging* to avoid external fragmentation.
 Paging divides the main memory into fixed-size blocks called *frames*.
@@ -139,7 +141,7 @@ Virtual memory allows multiple processes to share files and memory through page 
 For example, in Chrome, each tab is a separate process but uses the same shared libraries like libc and libssl.
 Instead of loading separate copies for each tab, the operating system maps the same physical pages into each process, thus reducing memory usage significantly.
 
-#### Demand Paging
+### Demand Paging
 
 As mentioned earlier, for a program to execute, it must first be loaded into main memory.
 However, when dealing with large programs, it’s not always necessary to load the entire program at once, only a portion currently needed.
@@ -171,16 +173,16 @@ RSS represents the amount of physical memory a process is currently using, inclu
 VSZ, on the other hand, represents the total virtual memory allocated to a process, including shared libraries plus the entire reserved address space, regardless of whether it is currently in physical memory or swapped out.
 Also, VSZ includes memory allocated but not yet used by the process, such as memory reserved through [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) or [`malloc`](https://man7.org/linux/man-pages/man3/free.3.html) that has not been accessed, which is not included in RSS.
 
-#### Virtual Memory Layout
+### Virtual Memory Layout
 
 Although virtual memory abstraction frees user-space programmers from managing physical memory directly, challenges still arise during memory allocation.
 Developers must consider issues such as where to allocate memory, whether a given address is valid, and whether it conflicts with reserved regions like the code segment.
 To address these issues, operating systems introduce the concept of *virtual memory layout*.
 From a process’s perspective, the virtual address layout appears as illustrated below, with addresses growing upward.
 
-| <img src="/assets/2025-06-03-memory_allocation_in_go/virtual_memory_layout.png" width=400> |
-|:------------------------------------------------------------------------------------------:|
-|               Virtual memory layout of an x86-64 Linux process <sup>8</sup>                |
+| <img id="virtual_memory_layout.png" src="/assets/2025-06-03-memory_allocation_in_go/virtual_memory_layout.png" width=400> |
+|:-------------------------------------------------------------------------------------------------------------------------:|
+|                               Virtual memory layout of an x86-64 Linux process <sup>8</sup>                               |
 
 The virtual memory layout is divided into several segments:
 1. **Kernel virtual memory space**: Reserved for the kernel and is not accessible to user-space processes.
@@ -193,16 +195,16 @@ The virtual memory layout is divided into several segments:
 
 Note that these segments are merely pages within the process's virtual address space.
 
-#### Stack Allocation
+### Stack Allocation
 
 Every process has a stack, a memory segment that tracks the local variables and function calls at some point in time.
 It's a data structure that grows downward as functions are called and local variables are allocated, shrinking upward as functions return.
 When a function is called, a new *stack frame* is created on the stack, which contains the function's local variables, parameters, and return address.
 When the function returns, its stack frame is popped off the stack, deallocating all variables within that stack frame.
 
-| <img src="https://cdn.hashnode.com/res/hashnode/image/upload/v1700063997626/2783c1e7-7c4e-4f76-a09f-dee9ff4094ad.gif" width=500> |
-|:--------------------------------------------------------------------------------------------------------------------------------:|
-|                      Visualization of how process stack grows and shrinks as program executes <sup>9</sup>                       |
+| <video width=500 autoplay controls id="stack_frame.mp4"><source src="/assets/2025-06-03-memory_allocation_in_go/stack_frame.mp4"/></video> |
+|:------------------------------------------------------------------------------------------------------------------------------------------:|
+|                           Visualization of how process stack grows and shrinks as program executes <sup>9</sup>                            |
 
 Every thread has its own stack. Since a process can have multiple threads, there may be multiple stacks within a process.
 When we refer to the "process stack",  we typically mean the stack of the main thread.
@@ -251,10 +253,10 @@ Since stack allocation is determined at compile time, if variable's size is not 
 Additionally, if variable is local to function `F` but still referenced by another function when `F` returns, allocating this variable on stack causes invalid address access.
 In such case, we need to allocate the variable on the heap instead.
 
-#### Heap Allocation
+### Heap Allocation
 
 Allocation variables on the heap means finding a free memory block in from the heap segment or resizing the heap there is no such memory block.
-The current limit of the heap is referred to as the *program break*, or *brk* as depicted in the above figure.
+The current limit of the heap is referred to as the *program break*, or *brk* as depicted in the above [figure](#virtual_memory_layout.png).
 
 Resizing the heap is just simple as telling the kernel to adjust its idea of where the process’s program break is.
 After the program break is increased, the program may access any address in the newly allocated area, but no physical memory pages are allocated yet.
@@ -269,7 +271,7 @@ Different strategies may be employed for this scan, depending on the implementat
 If the block is exactly the right size, then it is returned to the caller.
 If it is larger, then it is split, so that a block of the correct size is returned to the caller and a smaller free block is left on the free list.
 If no block on the free list is large enough, then `malloc` calls `sbrk` to allocate more memory.
-To reduce the number of calls to `sbrk`, rather than allocating exactly the number of bytes required, `malloc` increases the program break in larger units (some multiple of the virtual memory page size), putting the excess memory onto the free list.
+To reduce the number of calls to `sbrk`, rather than allocating exactly the amount of memory required, `malloc` increases the program break in larger units, putting the excess memory onto the free list.
 
 The figure below depicts how `malloc` manages memory blocks in heap, which is a one-dimensional array of memory address.
 Each memory block, apart from the actual space used for storing value of variables, it also stores its metadata such as the length of the block, pointer to previous block and next block in the free list.
@@ -279,13 +281,139 @@ These metadata allows `malloc` and `free` to function properly.
 |:--------------------------------------------------------------------------------------------:|
 |                             Free list visualization<sup>11</sup>                             |
 
-
 As heap is shared across threads, to avoid corruption in multithreaded applications, mutexes are used internally to protect the memory-management data structures employed by these functions.
 In a multithreaded application in which threads simultaneously allocate and free memory, there could be contention for these mutexes.
 Therefore, heap allocation is less efficient than stack allocation.
 
-Mention:
-- Heap allocation requires synchronization, as multiple threads may allocate memory from the heap concurrently.
+### Memory Mapping
+
+As depicted in virtual memory layout figure below, apart from the heap and stack, there is also a memory segment called *memory mapped regions*.
+There are two types of memory mapping: file mapping and anonymous mapping.
+A file mapping maps a region of a file directly into the calling process’s virtual memory, allowing its contents can be accessed by operations on the bytes in the corresponding memory region.
+An anonymous mapping doesn’t have a corresponding file; instead, the pages of the mapping are initialized to 0.
+Another way of thinking of an anonymous mapping is that it is a mapping of a virtual file whose contents are always initialized with zeros.
+
+| <img src="/assets/2025-06-03-memory_allocation_in_go/memory_layout_elf.png" width=400> |
+|:--------------------------------------------------------------------------------------:|
+|                      Memory layout for ELF programs <sup>12</sup>                      |
+
+A memory mapped region can be *private* (aka. *copy-on-write*) or *shared*.
+By private, it means that the memory region is only accessible by the process that created it.
+Whenever a process attempts to modify the contents of a page, the kernel first creates a new, separate copy of that page for the process and adjusts the process's page tables.
+Conversely, if the memory mapped region is shared, then all processes that share the same memory mapped region can see the changes made by any of them.
+
+Demand paging also works for memory mapping.
+When a user process's address space is expanded, kernel does not immediately allocate any physical memory for these new virtual addresses.
+Instead, the kernel implements demand paging, where a page will only be allocated from physical memory and mapped to the address space when the user process tries to write to that new virtual memory address<sup>[N](https://ryanstan.com/linux-demand-paging-anon-memory.html)</sup>.
+The read accesses will result in creation of a page table entry that references a special physical page filled with zeroes<sup>[N](https://www.kernel.org/doc/html/v5.16/admin-guide/mm/concepts.html#anonymous-memory)</sup>.
+
+Since anonymous memory mappings are not backed by a file and are always zero-initialized, they are ideal for programs that implement their own memory allocation strategies—such as Go—rather than relying on the operating system's default allocators like `malloc` and `free`.
+This allows greater control over memory management, enabling features like custom allocators or garbage collection tailored to the runtime's needs.
+
+
+## Go's View of Virtual Memory
+
+### Arena and Page
+
+As a Go process is simply a user-space application, it follows the standard virtual memory layout described in the previous section.
+Specifically, the *Stack* segment of the process is the `g0` stack (aka. system stack) associated with the main thread (`M0`) of the Go runtime.
+Initialized (i.e. having non-zero value) global variables are stored in the *Data* segment, while uninitialized ones reside in the *BSS* segment.
+The traditional *Heap* segment, which is located under the program break, is not utilized by the Go runtime to allocate heap objects.
+Instead, Go relies heavily on memory-mapped segments for allocating memory for goroutine stacks and heap objects.
+
+| <img src="/assets/2025-06-03-memory_allocation_in_go/go_virtual_memory_view.png" width=200> |
+|:-------------------------------------------------------------------------------------------:|
+|                         Virtual memory layout from Go's perspective                         |
+
+To manage this memory efficiently, Go runtime partitions these memory-mapped segments into hierarchical units, ranging from coarse-grained to fine-grained.
+The most coarse-grained units are known as an [*arenas*](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L245-L311), a fixed-size region of 64 MB. Arenas are not required to be contiguous due to the characteristic of [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call, which *may return a different address than requested*.
+
+Each arena is further subdivided into smaller fixed-size units called *pages*, each measuring 8 KB.
+It's important to note that these runtime-managed pages differ from the typical OS pages discussed in the previous section, which are commonly 4 KB in size.
+Each page holds multiple objects of *the same size* if the objects are smaller than 8 KB, or just a single object if the size is exactly 8 KB.
+Objects larger than 8 KB stretch over multiple pages.
+
+| <img src="/assets/2025-06-03-memory_allocation_in_go/go_memory_pages.png" width=900> |
+|:------------------------------------------------------------------------------------:|
+|                                  Go's memory pages                                   |
+
+These pages are also utilized for the allocation of goroutine stack.
+As discussed previously in my [Go Scheduler](https://nghiant3223.github.io/2025/04/15/go-scheduler.html) blog post, each goroutine stack initially occupies 2 KB, meaning a single 8 KB page can house up to 4 goroutine stacks.
+
+### Span and Size Class
+
+Another key concept in Go's memory management is the [*span*](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496).
+A span is a unit of memory consisting of one or more *contiguous* pages allocated together.
+Each span is subdivided into multiple objects of the same size.
+By partitioning a span into multiple equal object, Go effectively uses segregated fit memory allocation strategy.
+This strategy allows Go to efficiently allocate memory for objects of various sizes while minimizing fragmentation.
+
+The Go runtime organizes object sizes into a set of predefined groups called *size classes*.
+Every span belongs to exactly one size class, determined by the size of objects it contains.
+Go defines 68 distinct size classes, numbered from 0 to 67, as shown in this [table](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L6).
+Size class 0 is reserved to handle allocation for *large objects*, which is larger than 32 KB, while size class 1 to 67 are used for *tiny objects* and *small objects*.
+Note that every span belonging to some size class has a fixed number of pages and objects, as specified in the aforementioned [table](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go).
+
+| <img src="/assets/2025-06-03-memory_allocation_in_go/span_with_size_class.png" width=900> |
+|:-----------------------------------------------------------------------------------------:|
+|                           Two spans with different size classes                           |
+
+The figure above illustrates two spans: one from size class 38 (holding 2048-byte objects) and another from size class 55 (holding 10880-byte objects).
+Because a single 8 KB page fits exactly four 2048-byte objects, the span for size class 38 contains 8 objects within a single page.
+Conversely, since each 10880-byte object exceeds one page, the span for size class 55 spans 4 pages, accommodating 3 objects.
+
+But why doesn't a span of size class 55 contain only one object and stretch over 2 pages, as described in the below figure?
+The reason is to reduce memory fragmentation. Since objects within a span are contiguous, there could be a space between the last object and the end of the span.
+This space is called *tail waste*, and can be easily determined by the formula `(number of pages)*8192-(number of objects)*(object size)`.
+If the span were allocated across 2 pages, the tail waste would be `2*8192-10880*1=5504` bytes, significantly higher than the `4*8192-10880*3=128` bytes of tail waste when allocated across 4 pages.
+
+| <img src="/assets/2025-06-03-memory_allocation_in_go/span_tail_waste.png" width=900> |
+|:------------------------------------------------------------------------------------:|
+|                                  Tail waste in span                                  |
+
+While a user Go application can allocate objects of various sizes, why does Go have only 67 size classes for small objects?
+What if our application allocates a small object of size 300 bytes, which doesn't have a corresponding entry in ths size classes [table](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go)?
+In such case, Go runtime will round up the size of the object to the next size class, which is 320 bytes in this case.
+The <span style="color:#a9c3aa">green</span> object illustrated so far is not an actual object allocated by user Go application, but rather a size class object managed by the Go runtime.
+
+| <img src="/assets/2025-06-03-memory_allocation_in_go/user_objects_and_size_class_objects.png" width=500> |
+|:--------------------------------------------------------------------------------------------------------:|
+|                               User objects and size class objects in span                                |
+
+Objects allocated by user Go application (abbreviated by *user objects*) are contained within a size class object.
+User objects can vary in size, but they must be smaller than the size of the size class object.
+Because of this, there could be a waste between the size of the user object and the size of the size class object.
+These wastes together with the tail waste constitutes the *total waste* of the span.
+
+Let's consider a span of size class 55 in the worst-case scenario, where it holds three user objects, each with a size of 10241 bytes.
+The waste of 3 size class objects is `3*(10880-(10240+1))=3*639=1917` bytes (10240 is the size of the size class 54), and the tail waste is `4*8192-10880*3=128` bytes.
+Therefore, the total waste of this span is `1917+128=2045` bytes, while the span size is `4*8192=32768` bytes, resulting in the maximum total waste of `2045/32768=6.23%`, as described in the 6th column of the size class 55 in Go's size class [table](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L54).
+
+### Span Class
+
+Go’s garbage collector is a tracing garbage collector, which means it needs to traverse the object graph to identify all reachable objects during a collection cycle.
+However, if a type is known to contain no pointers—neither directly nor through its fields—then the garbage collector can safely skip scanning objects of that type to reduce overhead and improve performance, right?
+The presence or absence of pointers in a type is determined at compile time, so this optimization comes with no additional runtime cost.
+
+To facilitate this behavior, the Go runtime introduces the concept of a span class.
+A span class categorizes memory spans based on two properties: the size class of the objects they contain and whether those objects include pointers.
+If the objects contain pointers, the span belongs to the *scan* class. If they don’t, it's classified as a *noscan* class.
+
+Because pointer presence is a binary property—either a type contains pointers or it doesn’t—the total number of span classes is simply twice the number of size classes.
+Go defines 68*2=136 span classes in total. Each span class is represented by an integer, ranging from 0 to 135.
+
+Previously, I mentioned that every span belongs to exactly one size class.
+More accurately, however, every span belongs to exactly one span class.
+The associated size class can be derived by dividing the span class number by 2.
+Whether the span belongs to scan or noscan class is determined by the parity of the span class number: even numbers indicate scan spans, while odd numbers indicate noscan spans.
+
+## State of Virtual Memory
+
+Mention prot: _PROT_READ, _PROT_WRITE, _PROT_NONE.
+Mention flags: _MAP_ANON, _MAP_FIXED, _MAP_PRIVATE.
+
+In sysReserve, the kernel may return a different address than requested, so the caller must check the returned address.
+In sysMap, the caller must provide the previously reserved address with _MAP_FIXED, and the kernel will map the pages to that address.
 
 ---
 
@@ -402,6 +530,49 @@ Explain the behavior of mheap when allocating heap arenas:
 
 ===
 
+Mention some simple free-list allocator for fixed size objects in mheap, which is runtime.fixalloc
+they request memory from OS directly using `mmap` and manage the free list themselves,
+see https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mfixalloc.go#L16-L28:
+- spanalloc: allocate mspan
+
+===
+
+Mention how mheap grows:
+- Calculate ask page: ask = alignUp(npage, 512) * 8KB
+- Calculate new base: nBase = alignUp(h.curArena.base + ask, physPageSize)
+- mheap has a list of arenaHints, which are the expected addresses of the heap arenas.
+- Go loops through these hints and ask the OS to allocate memory for arenas at these addresses using `mmap`.
+  - If the OS returns a different address than the hint address, Go asks OS to unmap the newly allocated memory block and tries next hint
+  - If all hints fail, Go asks OS to allocate memory at a random address using `mmap` that aligns with heapArenaBytes (64MB on 64-bit arch or 4MB on 32-bit arch).
+- Allocate a block of memory to hold an heapArena object and add that object to mheap.arenas.
+- Update mheap.curArena base and end:
+  - if new arena is contiguous with the previous arena, update mheap.curArena.end to the end of the new arena, while mheap.curArena.base remains the same.
+  - otherwise, set mheap.curArena.base to the start of the new arena and mheap.curArena.end to the end of the new arena.
+- Add the new arena to mheap.arenas.
+- Update mheap.curArena.base to nBase, which is the new base (see above).
+- Grow the mheap.pages pageAlloc in the arena from the old mheap.curArena.base to the new mheap.curArena.base.
+
+mheap.arena, which is a linearAlloc, is only used in 32-bit arch, according to this comment:
+https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L555-L555
+
+According to this code, arenaHint is only initialized in 32-bit arch:
+https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L619-L619
+
+Arena offset is 0 for most of the systems, except for AIX and AMD64, where it is set to 0xffff800000000000 and 0x0a00000000000000 respectively.
+https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L308-L309
+
+The new arena may not be contiguous with the previous arenas, according to this comment:
+https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mheap.go#L1501-L1501
+
+=== 
+
+Memory state transition:
+None --> Reserved to grow arena  
+Reserved --arena grew--> Prepared  
+Prepared --pages grew in pageAlloc, init span--> Ready  
+
+===
+
 Mention that pageAlloc is the struct that manges the heap arenas, is responsible for finding free pages in heap arena.
 pageAlloc uses a radix tree to store the bit map of pages, where 0 means free and 1 means in-used.
 The bitmap is sharded into multiple chunks:
@@ -444,6 +615,9 @@ This means:
 ```go
 func (b *pallocBits) summarize() pallocSum {}
 ```
+
+
+Understand summary: https://www.youtube.com/watch?v=S_1YfTfuWmo
 
 pallocSum, is a summary, which has 3 properties:
 - start: number of first consecutive 0s in the bitmap
@@ -500,6 +674,7 @@ Key Benefits
 ===
 
 Mention during program bootstrap, Go runtime also initializes 2 goroutines for sweeping and scavenging.
+- Improve scanvenger: https://github.com/golang/go/issues/30333
 
 Mention 1 heap allocation optimization is grouping scalar types into a single struct allocation.
 See: https://github.com/golang/go/commit/ba7b8ca336123017e43a2ab3310fd4a82122ef9d.
@@ -507,6 +682,8 @@ See: https://github.com/golang/go/commit/ba7b8ca336123017e43a2ab3310fd4a82122ef9
 Mention scavenge: https://groups.google.com/g/golang-nuts/c/eW1weV-FH1w
 
 ## Thread Stack and Goroutine Stack
+
+https://docs.google.com/document/u/0/d/1wAaf1rYoM4S4gtnPh0zOlGzWtrZFQ5suE8qr2sD8uWQ/mobilebasic
 
 Mention stack of main thread and other thread in Go.
 

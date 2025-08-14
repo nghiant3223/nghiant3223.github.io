@@ -1,7 +1,7 @@
 serve:
 	bundle exec jekyll serve
 
-serve_draft:
+draft:
 	bundle exec jekyll serve --drafts
 
 PHONY: serve
