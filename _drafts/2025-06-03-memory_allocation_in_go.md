@@ -345,7 +345,7 @@ As discussed previously in my [Go Scheduler](https://nghiant3223.github.io/2025/
 Another key concept in Go's memory management is the [*span*](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496).
 A span is a unit of memory consisting of one or more *contiguous* pages allocated together.
 Each span is subdivided into multiple objects of the same size.
-By partitioning a span into multiple equal object, Go effectively uses segregated fit memory allocation strategy.
+By partitioning a span into multiple equal object, Go effectively uses *segregated fit* memory allocation strategy.
 This strategy allows Go to efficiently allocate memory for objects of various sizes while minimizing fragmentation.
 
 The Go runtime organizes object sizes into a set of predefined groups called *size classes*.
@@ -392,7 +392,7 @@ Therefore, the total waste of this span is `1917+128=2045` bytes, while the span
 ### Span Class
 
 Go’s garbage collector is a tracing garbage collector, which means it needs to traverse the object graph to identify all reachable objects during a collection cycle.
-However, if a type is known to contain no pointers—neither directly nor through its fields—then the garbage collector can safely skip scanning objects of that type to reduce overhead and improve performance, right?
+However, if a type is known to contain no pointers neither directly nor through its fields, e.g. a struct that has multiple fields and some of the fields contain pointer to primitive types for pointer to another struct, then the garbage collector can safely skip scanning objects of that type to reduce overhead and improve performance, right?
 The presence or absence of pointers in a type is determined at compile time, so this optimization comes with no additional runtime cost.
 
 To facilitate this behavior, the Go runtime introduces the concept of a span class.
@@ -400,304 +400,256 @@ A span class categorizes memory spans based on two properties: the size class of
 If the objects contain pointers, the span belongs to the *scan* class. If they don’t, it's classified as a *noscan* class.
 
 Because pointer presence is a binary property—either a type contains pointers or it doesn’t—the total number of span classes is simply twice the number of size classes.
-Go defines 68*2=136 span classes in total. Each span class is represented by an integer, ranging from 0 to 135.
+Go defines `68*2=136` span classes in total. Each span class is represented by an integer, ranging from 0 to 135.
+If span class is even, it is a *scan* class; while if it is odd, it is a *noscan* class.
 
 Previously, I mentioned that every span belongs to exactly one size class.
 More accurately, however, every span belongs to exactly one span class.
 The associated size class can be derived by dividing the span class number by 2.
 Whether the span belongs to scan or noscan class is determined by the parity of the span class number: even numbers indicate scan spans, while odd numbers indicate noscan spans.
 
-## State of Virtual Memory
+### Heap Bits and Malloc Header
 
-Mention prot: _PROT_READ, _PROT_WRITE, _PROT_NONE.
-Mention flags: _MAP_ANON, _MAP_FIXED, _MAP_PRIVATE.
+Given a big struct having 1000 fields, some of the fields are pointers, how does Go's garbage collector know which fields are pointers so that it can traverse the object graph correctly?
+If the GC had to inspect every field of every object at runtime, it would be prohibitively inefficient, especially for large or deeply nested data structures.
+To solve this, Go uses metadata to efficiently identify pointer locations without scanning all fields.
+This mechanism is based on two key structures: heap bits and malloc headers.
 
-In sysReserve, the kernel may return a different address than requested, so the caller must check the returned address.
-In sysMap, the caller must provide the previously reserved address with _MAP_FIXED, and the kernel will map the pages to that address.
+For objects smaller than 512 bytes, Go allocates memory in spans and uses a heap bitmap to track which words in the span contain pointers.
+Each bit in the bitmap corresponds to a word (typically 8 bytes): 1 indicates a pointer, 0 indicates non-pointer data.
+The bitmap is stored at the end of the span and shared by all objects in that span.
+When a span is created, Go reserves space for the bitmap and uses the remaining space to fit as many objects as possible.
 
----
+| <img src="/assets/2025-06-03-memory_allocation_in_go/heap_bits.png" width=500> |
+|:------------------------------------------------------------------------------:|
+|                              Heap bits in a span                               |
 
-Mention page table to map virtual pages to physical frames (read "OS Concepts" book).
-See: https://linux-kernel-labs.github.io/refs/heads/master/lectures/address-space.html#linux-paging
+For objects larger than 512 bytes, maintaining a big bitmap is inefficient.
+Instead, each object is accompanied by an 8-byte malloc header—a pointer to the object’s type information.
+This type metadata includes the [`GCData`](https://github.com/golang/go/blob/go1.24.0/src/internal/abi/type.go#L31-L42) field, which encodes the pointer layout of the object.
+The garbage collector uses this data to precisely and efficiently locate only the fields that contain pointers.
 
-Mention first-fit, best-fit, and segregated-fit algorithms for memory allocation (read https://www.cs.cmu.edu/afs/cs/academic/class/15213-f09/www/lectures/17-dyn-mem.pdf).
-Also read 9.9.14 Segregated Free Lists in Computer System, A Programmer's Perspective book.
+| <img src="/assets/2025-06-03-memory_allocation_in_go/malloc_header.png" width=500> |
+|:----------------------------------------------------------------------------------:|
+|                              Malloc header in a span                               |
 
-Mention process memory layout: text, data, heap, stack, mmap regions (read "OS Concepts" book and online resource).
+## Go Heap: [mheap](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241)
 
-Mention RSS and VSZ, how they relate to memory allocation (read "Linux Programming Interface" book).
+### Span Allocation
 
-Mention that there are many APIs to allocate memory: sbrk, malloc, free. malloc is a wrapper around sbrk, which is a system call to allocate memory from the heap.
+Since the Go runtime operates within a vast virtual address space, the [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241) allocator can struggle to locate contiguous free pages efficiently when it comes to allocating a span, especially under high concurrency.
+In early versions of Go, as detailed in the [Scaling the Go Page Allocator](https://go.googlesource.com/proposal/+/refs/changes/57/202857/2/design/35112-scaling-the-page-allocator.md) proposal, every `mheap` operation was globally synchronized.
+This design caused *severe throughput degradation and increased tail latency* during heavy allocation workloads.
+Today's Go memory allocator implements the scalable design from that proposal.
+Let's dive into how it overcomes these bottlenecks and manages memory allocation efficiently in highly concurrent environments.
 
-Mention that `mmap` system call just allocates virtual memory in between process stack and heap, Linux uses demand paging (demand-zero paging), the physical frame is not allocated until the corresponding page is accessed.
-- https://offlinemark.com/demand-paging/
-- https://ryanstan.com/linux-demand-paging-anon-memory.html
-- https://www.kernel.org/doc/html/v5.16/admin-guide/mm/concepts.html#anonymous-memory
-- https://stackoverflow.com/questions/60076669/kernel-virtual-memory-space-and-process-virtual-memory-space
-- Section 9.8 Memory Mapping, Computer System: A Programmer's Perspective book
+#### Tracking Free Pages
 
-Explain physical frame, virtual page, page table, memory layout, demand paging, VSZ, RSS.
-Explain stack, heap, memory fragmentation.
-Mention that stack is linear allocation, that's why it is fast.
-Get image from the book: Computer Systems: A Programmer's Perspective.
+Because the virtual address space is large, and each page’s state (free or in-use) is a binary property, it is efficient to store this information in a bitmap where `1` represents in-use and `0` represents free.
+Note that in-use or free in this context refers to whether the page is handed to `mcentral` or not, not whether it is in-use or free by the user Go application.
+Each bitmap is an array of 8 `uint64` values, taking 64 bytes in total, and can represent the state of 512 contiguous pages.
 
-Mention that each thread has its own stack. When creating thread with clone (what Go does), the stack space must be allocated beforehand and the starting address of the stack must be specified.
-See: https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/os_linux.go#L186-L186
-When Go clones a thread, it passes M.g0.stack.hi as the stack address.
-See: https://grok.com/chat/ce58ca57-b84a-41ca-8ecf-54498ab0c6ba
+Given that an arena is 64 MB in size and each page is 8 KB, there are `64MB/8KB=8192` pages in an arena.
+Since each bitmap covers 512 pages, an arena requires `8192/512=16` bitmaps.
+With each bitmap taking 64 bytes, the total size of all bitmaps for an arena is `16×64=1024` bytes, or 1 KB.
 
-Talk about RSP register. Mention that process's stack is pre-allocated, so allocating memory on stack is just moving the RSP register down, WITHIN the allocated memory space.
-Therefore, allocating variable on stack is fast & cheap.
-Initially, when a process is created, the value of RSP is set to the top of the stack, as mentioned in https://lwn.net/Articles/631631/: "the saved stack pointer to the current top of the stack"
-Also mentioned in: https://refspecs.linuxfoundation.org/ELF/zSeries/lzsabi0_zSeries/x895.html
+However, iterating through a bitmap to find a run of free pages is still inefficient, and wasteful if the bitmap doesn't contain any free pages.
+It's better if we somehow *cache* the free pages so that we can quickly find a free page without scanning the bitmap.
+Go introduces the concept of *summary* for a bitmap, which has three fields: `start`, `end`, and `max`.
+`start` is the number of contiguous 0 bits at the beginning of a bitmap.
+Similarly, `end` is the number of contiguous 0 bits at the end of the bitmap.
+Finally, `max` represents the largest contiguous sequence of 0 bits.
+The summaries are updated eagerly as soon as the bitmap is modified, i.e. when a page is allocated or freed.
 
-Apart from RSP, there is frame pointer (FP) or base pointer (BP) register, which points the starting address of the current function's stack frame. This is used to access local variables and function parameters.
+The figure below shows a bitmap summary: there are 3 contiguous free pages at the beginning, 7 contiguous free pages at the end, and the longest run of free pages is 10.
+The arrow indicates the growth direction in address space, i.e. 3 free pages at the lower address and 7 free pages at the higher address.
 
-Eg:
-```cpp
-#include <stdio.h>
-void func() {
-    int x = 10; // "Allocated" by decrementing RSP within pre-allocated stack
-    printf("Stack variable at %p\n", &x);
-}
-int main() {
-    int *p = malloc(4); // Dynamic heap allocation
-    func();
-    free(p);
-    return 0;
-}
-```
-Stack: The variable x in func is allocated by decrementing RSP (e.g., sub rsp, 8 in assembly) within the main thread’s pre-allocated stack ([0x7ffffffde000 - 0x7ffffffff000]).
-Heap: malloc(4) requests memory from the heap, potentially expanding it via brk or mmap.
-Assembly for func (simplified x86-64)
+| <img src="/assets/2025-06-03-memory_allocation_in_go/bitmap_summary.png" width=500> |
+|:-----------------------------------------------------------------------------------:|
+|                          Visualization of a bitmap summary                          |
 
-```asm
-func:
-    push rbp
-    mov rbp, rsp
-    sub rsp, 8    ; Reserve 8 bytes for x within pre-allocated stack
-    mov DWORD PTR [rsp], 10 ; Store 10 in x
-    ...
-    mov rsp, rbp  ; Restore RSP
-    pop rbp
-    ret
-```
+With these three fields, Go is able to find a sufficient contiguous free chunk of memory within a single arena or across multiple adjacent arenas by merging the summaries of contiguous memory chunks.
+Consider two adjacent chunks, `S1` and `S2`, each spanning 512 pages.
+The summary of `S1` is `start=3`, `end=7`, and `max=10`, while the summary of `S2` is `start=5`, `end=2`, and `max=8`.
+Since these chunks are contiguous, they can be merged into a single summary covering all 1024 pages.
+The merged one is computed as `start=S1.start=3`, `end=S2.end=2`, `max=max(S1.max, S2.max, S1.end+S2.start)=max(10, 8, 7+5)=12`.
 
-RBP is the base pointer register. `mov rbp, rsp` save the current stack pointer (RSP) to the base pointer (RBP), establishing a new stack frame.
-When function returns, `mov rsp, rbp` restores the stack pointer to its previous state, effectively deallocating the space used by local variables like x.
+| <img src="/assets/2025-06-03-memory_allocation_in_go/merging_summary.png" width=900> |
+|:------------------------------------------------------------------------------------:|
+|                  Merging summaries of two contiguous memory chunks                   |
 
-## Heap
+By merging lower-level summaries, Go implicitly builds a hierarchical structure that enables efficient tracking of contiguous free pages.
+It manages the entire virtual address space using a single global [*radix tree*](https://en.wikipedia.org/wiki/Radix_tree) of summaries as depicted in the figure below.
+Each <span style="color:#0f8088">blue</span> box represents a summary for a contiguous memory chunk and its dotted lines to the next level reflects what portion in the next level it covers.
+The <span style="color:#81b365">green</span> box represents the bitmap that a leaf node summary refers to.
 
-UNDERSTAND: https://github.com/golang/proposal/blob/2c02d6bab9c85b41afd730856a70286a687f85be/design/35112-scaling-the-page-allocator.md
+| <img src="/assets/2025-06-03-memory_allocation_in_go/summary_radix_tree.png" width=900> |
+|:---------------------------------------------------------------------------------------:|
+|                  Radix tree of summaries for the entire address space                   |
 
-Mention that there is still memory fragmentation in Go, as specified in:
-https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/sizeclasses.go#L90-L90
+On linux/amd64 architecture, Go uses a 48-bit virtual address space, which is `2^48` bytes or 256 TB.
+In this setup, the radix tree has a height of 5.
+Internal nodes (levels 0 to 3) store summaries derived from merging their 8 child nodes.
+Each leaf node (level 4) corresponds to the summary of a single bitmap, which covers 512 pages.
 
-Ask why there is no method to allocate memory on stack like `malloc` for heap allocation, that's because stack allocation is done at compile time, while heap allocation is done at runtime.
-Mention that Go's stack doesn't relate to the process stack, Go's heap doesn't relate to the process heap.
-Go's heap is allocated using `mmap` and is managed by the Go runtime. Go's stack and heap live in this mapped memory space.
+There are `16384` entries at level 0, `16384*8` entries at level 1, `16384*8^2` entries at level 2, `16384*8^3` entries at level 3, and `16384*8^4` entries at level 4.
+Because each leaf entry summarizes 512 pages, each level 0 entry summarizes `512*8^4=2097152` contiguous pages, which accommodates `2097152*8KB=16GB` amount of memory.
+Note that these numbers represent the maximum possible entries. The actual number of entries at each level increases gradually as the Go heap grows.
 
-Mention mspan.
+| <img src="/assets/2025-06-03-memory_allocation_in_go/radix_tree_zoom.png" width=900> |
+|:------------------------------------------------------------------------------------:|
+|                      A deeper look into the summary radix tree                       |
 
-Mention that type with no pointer will be allocated in noscan spanclass, while types with pointers will be allocated in scan spanclass.
-GC doesn't need to scan every field of object of noscan spanclass, but it needs to visit scan spanclass to find pointers to other objects.
+As mentioned earlier, each level 0 entry summaries `209715=2^21` contiguous pages, `start`, `end`, and `max` can be as big as `2^21`.
+As a result, storing all these three fields together requires up to `21*3=63` bits.
+This makes it possible to pack a summary into a single `uint64` called [`pallocSum`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagealloc.go#L985-L990): the first 21 bits store `start`, the next 21 bits store `end`, and the following 21 bits store `max`.
 
-Mention that each mspan has a heapBits method.
-If heapBits is already in mspan (size ≤ 512 bytes), we don't need to allocate header for the objects in that mspan.
-heapBits is a bitmap that store at the end of the mspan, it indicates which words has a pointer to another object.
-heapBits is set in heapSetTypeNoHeader method, which is called when the object is allocated.
-Otherwise, we need to allocate a header for the objects in that mspan, indicated by size += mallocHeaderSize.
-Header is prepended to the object. There are 8 bytes of header, and the remaining 8 bytes is used for the object itself.
-https://go.googlesource.com/proposal/+/master/design/12800-sweep-free-alloc.md                                                             
+There is one special case: if `max=2^21`, it means the entire chunk is free.
+In this situation, `start` and `end` are also `2^21`, and the summary is encoded as `1<<63`.
+Conversely, if the chunk has no free page, i.e. both `start`, `end` and `max` are `0`, the summary value is definitely `0`.
 
-https://go.dev/src/runtime/mbitmap.go
-The GC method scanobject -> typePointersOfUnchecked -> heapBitsSmallForAddr: read heapBits
-                                                    \-> read object's type header
+The summary radix tree is implemented as an [array of slices](https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagealloc.go#L181-L202), where each slice corresponds to a tree level.
+The array fixes the number of levels in the tree, while the slices grow dynamically as the Go heap expands.
+Summaries for the lower address stays at the beginning of the slice, while summaries for the higher address are appended to the end of the slice.
+Since the summary slice at a given level covers the entire *reserved* address space, the index of a summary within its slice directly determines the memory region it represents.
 
-Mention radix tree, which is used to find a free page in heap arenas.
+#### Finding Free Pages: [`pageAlloc.find`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagealloc.go#L631-L870)
 
-Mention the heap arena arenaBaseOffset = 0xffff800000000000*goarch.IsAmd64 + 0x0a00000000000000*goos.IsAix
-However, this is not heap arena starting address, it's just used to calculate the heap arena offset, index
+Go uses depth-first search algorithm locate a sufficient run of free pages. It begins with scanning up to 16,384 entries at level 0 of the radix tree. If a summary is `0` (meaning no free pages), it moves on to the next entry.
+If a sufficient run is found at the boundary between two adjacent entries, or at the start of the first entry, or at the end of the last entry, then it returns the address of the free run immediately, based on the address the summary refers to.
 
-Mention mheap.pageAlloc uses radix-tree to find a free page from heap arenas.
+Otherwise, if current summary’s `max` field satisfies the allocation request, the search descends into its 8 child entries at the next level.
+If the search reaches the leaf level but still can't find a sufficient run, then it scans the bitmap within the entry whose `max` value is large enough, in order to locate the exact run of free pages.
+If we traverse all entries at level 0 but still can't find a sufficient run, it returns `0`, indicating no free pages.
 
-Mention mheap.pageAlloc also sweeps & scavenges, by invoking sysUnused (madvise with _MADV_FREE).
-After scavenging, the mapping from virtual pages to physical frames is removed, kernel reclaming the physical frames.
+You may notice a drawback in this algorithm: if many pages at the beginning of level 0 are already in use, the allocator ends up traversing the same path in the radix tree repeatedly for each allocation, which is inefficient.
+Go addresses this by maintaining a *hint* called [`searchAddr`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mpagealloc.go#L241-L249), which marks an address before which no free pages exist.
+This allows the allocator to begin its search directly from the hint instead of restarting from the beginning.
 
-Explain the behavior of mheap when allocating heap arenas:
-- Heap arenas may not be contiguous in process virtual memory space.
-- ...
+Since allocations proceed from lower to higher addresses in the heap, the hint can be advanced after each search, shrinking the search space until new memory is freed.
+In practice, most allocations occur close to the current hint.
 
-===
+#### Growing the Heap: [`mheap.grow`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L1482-L1583)
 
-Mention some simple free-list allocator for fixed size objects in mheap, which is runtime.fixalloc
-they request memory from OS directly using `mmap` and manage the free list themselves,
-see https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mfixalloc.go#L16-L28:
-- spanalloc: allocate mspan
+If no free pages are available in the radix tree, i.e. [`pageAlloc.find`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagealloc.go#L631-L870) returns 0, Go runtime must ask the kernel to expand its virtual address space by making an [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call.
+The growth may not be as big as the number of pages requested, but instead occurs in larger chunks rounded up to the arena size (64 MB).
+Even if only a single page is requested, the heap expands by 64 MB virtual memory (not physical one, thanks to demand paging!).
 
-===
+To manage this, the runtime maintains a list of *hint addresses* called [`arenaHints`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L158-L162), which are addresses it prefers the kernel to use for new allocations.
+This list is initialized before the `main` function runs, and its values can be found [here](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L477-L553).
+During heap growth, Go iterates through these hints, asking the kernel to allocate memory at each suggested address by passing that address to the first parameter of [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call.
 
-Mention how mheap grows:
-- Calculate ask page: ask = alignUp(npage, 512) * 8KB
-- Calculate new base: nBase = alignUp(h.curArena.base + ask, physPageSize)
-- mheap has a list of arenaHints, which are the expected addresses of the heap arenas.
-- Go loops through these hints and ask the OS to allocate memory for arenas at these addresses using `mmap`.
-  - If the OS returns a different address than the hint address, Go asks OS to unmap the newly allocated memory block and tries next hint
-  - If all hints fail, Go asks OS to allocate memory at a random address using `mmap` that aligns with heapArenaBytes (64MB on 64-bit arch or 4MB on 32-bit arch).
-- Allocate a block of memory to hold an heapArena object and add that object to mheap.arenas.
-- Update mheap.curArena base and end:
-  - if new arena is contiguous with the previous arena, update mheap.curArena.end to the end of the new arena, while mheap.curArena.base remains the same.
-  - otherwise, set mheap.curArena.base to the start of the new arena and mheap.curArena.end to the end of the new arena.
-- Add the new arena to mheap.arenas.
-- Update mheap.curArena.base to nBase, which is the new base (see above).
-- Grow the mheap.pages pageAlloc in the arena from the old mheap.curArena.base to the new mheap.curArena.base.
+The kernel, however, may choose a different location. If that happens, Go moves on to the next hint.
+If all hints fail, Go falls back to requesting memory at a random address aligned to the arena size, and then updates the hint list so that the future growth stays contiguous with the newly allocated arena.
 
-mheap.arena, which is a linearAlloc, is only used in 32-bit arch, according to this comment:
-https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L555-L555
+This process transitions the memory section from *None* to *Reserved*.
+Once the arena is registered with the runtime, i.e. by being added to the [list of all arenas](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L127-L147), the section transitions from *Reserved* to *Prepared*.
+At this point, the radix summary tree is updated to include the new arena, expanding the summary slices at each level, marking the bitmap for new pages as free, and update the summaries accordingly.
+This new memory section is also tracked as [in-use](https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagealloc.go#L386-L386).
 
-According to this code, arenaHint is only initialized in 32-bit arch:
-https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L619-L619
+#### Preparing a Span: [`mheap.haveSpan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L1270-L1385)
 
-Arena offset is 0 for most of the systems, except for AIX and AMD64, where it is set to 0xffff800000000000 and 0x0a00000000000000 respectively.
-https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L308-L309
+Once the requested run of pages is found, the runtime prepares an [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) object to manage that memory range.
+Like any other Go object, an [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) itself must live in memory.
+Thus, these [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) objects are allocated by a [slab](https://en.wikipedia.org/wiki/Slab_allocation) allocator [`fixalloc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mfixalloc.go#L16-L42), which requests memory directly from the kernel using [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call.
 
-The new arena may not be contiguous with the previous arenas, according to this comment:
-https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mheap.go#L1501-L1501
+The span is then set up with its size class, the number of pages it covers, and the address of its first page.
+The associated memory section transitions from *Prepared* to *Ready*, indicating that it's ready for [`mcentral`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L20-L45) to use.
 
-=== 
+#### Caching Free Pages: [`mheap.allocToCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagecache.go#L110-L183)
 
-Memory state transition:
-None --> Reserved to grow arena  
-Reserved --arena grew--> Prepared  
-Prepared --pages grew in pageAlloc, init span--> Ready  
+Unfortunately, both [`pageAlloc.find`](#finding-free-pages-pageallocfind) and [`mheap.grow`](#growing-the-heap-mheapgrow) rely on global locks, which can become bottlenecks under heavy concurrent allocation workloads.
+Since a Go program can run as many concurrent threads as there are `P`s (processors), caching free pages locally in each `P` helps avoid global lock contention.
 
-===
+Go implements this with a per-`P` [`pageCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L641-L641).
+A [`pageCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L641-L641) consists of a base address for a 64-page-aligned memory chunk and a 64-bit bitmap tracking which of those pages are free.
+Because each page is 8 KB, a single `P`'s [`pageCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L641-L641) can hold up to 512 KB of free memory.
 
-Mention that pageAlloc is the struct that manges the heap arenas, is responsible for finding free pages in heap arena.
-pageAlloc uses a radix tree to store the bit map of pages, where 0 means free and 1 means in-used.
-The bitmap is sharded into multiple chunks:
-```go
-// Each chunk represents 512 pages (4MB) of memory
-const (
-  pallocChunkPages    = 1 << logPallocChunkPages  // 512 pages
-  pallocChunkBytes    = pallocChunkPages * pageSize // 4MB
-  logPallocChunkPages = 9
-)
-```
-The bitmap is divided into chunks, where each chunk tracks 512 pages (4MB) of memory. Each chunk has its own bitmap:
-```go
-// pallocData encapsulates pallocBits and a bitmap for scavenging
-type pallocData struct {
-    pallocBits    // Main bitmap: 0 = free, 1 = allocated
-    scavenged pageBits  // Scavenging bitmap
-}
+When a goroutine requests a span from [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241), the runtime first checks the [`pageCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L641-L641) of the current `P`.
+If it contains enough free pages, those pages are used immediately to prepare a span.
+If not, the runtime falls back to invoking [`pageAlloc.find`](#finding-free-pages-pageallocfind) to locate a sufficient run of pages.
 
-// pallocBits is a bitmap that tracks page allocations for one chunk
-type pallocBits pageBits
+If the [`pageCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L641-L641) is empty, the runtime allocates a new one.
+It first tries to obtain pages near the current hint [`searchAddr`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mpagealloc.go#L241-L249) in the summary radix tree (as described in [Finding Free Pages](#finding-free-pages-pageallocfind) section).
+Since the hint may not be accurate, it may instead need to walk the radix tree to find free pages.
 
-// pageBits represents 512 bits (one per page)
-type pageBits [pallocChunkPages / 64]uint64  // 8 uint64s = 512 bits, each bit represents in-use or free of a page, 1 pageBits is for 1 chunk
-```
+Note that the probability of having a `N` free pages decreases when `N` approaches 64, as the [`pageCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L641-L641) is limited to 64 pages.
+In such case, there would be too many cache misses, and the runtime would have to frequently fall back to [`pageAlloc.find`](#finding-free-pages-pageallocfind) to find free pages.
+That's why if `N` is greater than 16, the runtime doesn't bother checking the cache, and fallback to [`pageAlloc.find`](#finding-free-pages-pageallocfind) right away.
 
-The chunks are stored in a two-level sparse array (similar to mheap.arenas):
-```go
-type pageAlloc struct {
-    // Two-level sparse array of chunks
-    chunks [1 << pallocChunksL1Bits]*[1 << pallocChunksL2Bits]pallocData
-}
-```
+<table>
+    <thead>
+        <tr>
+            <td>
+                <pre class="mermaid" style="margin: unset">
 
-This means:
-- L1: Points to L2 arrays (only allocated when needed)
-- L2: Contains the actual pallocData chunks
-- Sparse: Only chunks that are actually used are allocated
+flowchart LR
+0[Start] --> A
+A{N < 16} --> |No|B[Acquire lock]
+B --> C[Find free pages at hint address]
+C --> |Found?|D{Found free pages?}
+D --> |Yes|E[Release lock]
+D --> |No|F[Find free pages by<br/>walking summary radix tree]
+F --> E
+E --> G[Prepare a span]
+A --> |Yes|H{Is<br/>P's page cache<br/>empty?}
+H --> |Yes|I[Acquire lock]
+I --> J[Allocate a <br/>new page cache<br/>for P]
+J --> K[Release lock]
+K --> L[Find free pages<br/>in the page cache]
+H --> |No|L
+L --> M{Found free pages?}
+M --> |Yes|G
+M --> |No|B
+G --> 1[End]
 
-```go
-func (b *pallocBits) summarize() pallocSum {}
-```
+                </pre>
+            </td>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td style="text-align: center">
+                Overview of span allocation logic
+            </td>
+        </tr>
+    </tbody>
+</table>
 
+Once new pages are acquired, they are marked as in-use in the summary radix tree to prevent other `P`s from claiming them and to ensure the allocator does not reuse them on the next heap growth.
+The summary radix tree hint is also updated so that subsequent allocations skip over these pages, which are in-use.
 
-Understand summary: https://www.youtube.com/watch?v=S_1YfTfuWmo
+#### Caching Free Spans: [`mheap.allocMSpanLocked`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L1103-L1133)
 
-pallocSum, is a summary, which has 3 properties:
-- start: number of first consecutive 0s in the bitmap
-- end: number of last consecutive 1s in the bitmap
-- max: maximum number of consecutive 0s in the bitmap
+As discussed in [Preparing a Span](#preparing-a-span-mheaphavespan), an [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) must be allocated to represent and manage a span of pages. If an [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) is obtained directly from [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241), it requires acquiring a global lock, which can become a performance bottleneck. To avoid this, the Go runtime caches free [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) objects per `P`, just as it does with pages.
 
-Summaries can be merged with each other to create a hierarchical structure, allowing for efficient searching of free pages:
-- we can merge the summaries by picking the maximum of each summary's max value and the sum of their start and end values.
-- I propose we update these summary values eagerly as spans are allocated and freed
+When free pages are found in a [`pageCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L641-L641), the runtime first checks whether the current `P` already has a cached [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496).
+If so, it can be reused immediately without any global lock contention.
 
-```go
-type pageAlloc struct {
-  // Radix tree of summaries
-  summary [summaryLevels][]pallocSum
-}
-```
-
-Example for 64-bit system:
-L0 (Root): Each summary covers 16GB (represents 8 L1 summaries)
-L1: Each summary covers 2GB (represents 8 L2 summaries)
-L2: Each summary covers 256MB (represents 8 L3 summaries)
-L3: Each summary covers 32MB (represents 8 L4 summaries)
-L4 (Leaf): Each summary covers 4MB (represents 1 chunk)
-
-A given entry at some level of the radix tree represents the merge of some number of summaries in the next level.
-The leaf level in this case contains the per-chunk summaries, while each entry in the previous levels may reflect 8 chunks, and so on.
-This tree would be constructed from a finite number of arrays of summaries, with lower layers being smaller in size than following layers, since each entry reflects a larger portion of the address space.
-
-Visual Example
-Let's say we want to allocate 3 pages:
-1. Check page cache → Empty
-2. Search radix tree:
-  L0: Summary says "max 100 free pages" → Descend to L1
-  L1: Summary says "max 50 free pages" → Descend to L2
-  L2: Summary says "max 10 free pages" → Descend to L3
-  L3: Summary says "max 5 free pages" → Descend to L4
-  L4: Summary says "max 3 free pages" → Search this chunk's bitmap
-3. Search chunk bitmap:
-  Bitmap: 000111000000... (0=free, 1=allocated)
-  Find first 3 consecutive 0s → Found at position 3
-  Return address: chunkBase + 3 * pageSize
-4. Update bitmaps and summaries:
-  Set bits 3,4,5 in chunk bitmap to 1
-  Recompute chunk summary
-  Propagate changes up the radix tree
-
-Key Benefits
-  Efficient Search: O(log n) instead of O(n)
-  Cache-Friendly: Summary blocks fit in cache lines
-  Memory Efficient: Only allocate chunks that are used
-  Fast Updates: Only update affected summaries
-  The radix tree acts as a hierarchical index over the bitmap, allowing the allocator to quickly skip over large regions with no free space and focus on promising areas.
-
-===
-
-Mention during program bootstrap, Go runtime also initializes 2 goroutines for sweeping and scavenging.
-- Improve scanvenger: https://github.com/golang/go/issues/30333
+If no cached [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) is available, the runtime allocates multiple [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) objects from [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241), caches them in the `P`’s free list for future use, and assigns one of them to manage the newly allocated run of pages.
 
 Mention 1 heap allocation optimization is grouping scalar types into a single struct allocation.
 See: https://github.com/golang/go/commit/ba7b8ca336123017e43a2ab3310fd4a82122ef9d.
 
 Mention scavenge: https://groups.google.com/g/golang-nuts/c/eW1weV-FH1w
 
-## Thread Stack and Goroutine Stack
+## Goroutine Stack
 
 https://docs.google.com/document/u/0/d/1wAaf1rYoM4S4gtnPh0zOlGzWtrZFQ5suE8qr2sD8uWQ/mobilebasic
 
 Mention stack of main thread and other thread in Go.
 
-Mention that each thread created with clone is allocated with a new thread, as in https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L2242-L2242
+Mention that each thread created with clone is allocated with a new thread, as in https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L2242-L2242
 This is subject to the requirement of clone: the caller of clone must setup stack space for child thread before calling clone.
 The parameter `stack` in `clone` is the starting address (higher address) of the stack space for the child thread.
-The stack size of threads other than main is 16KB, see https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L2242-L2242
+The stack size of threads other than main is 16KB, see https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L2242-L2242
 While stack size of main thread is controlled by the kernel.
 
 Mention that the memory space used by stack is also mspan.
 
 Mention stack allocation use mheap.allocSpan with typ=spanAllocStack (allocManual), while heap allocation use mheap.allocSpan with typ=spanAllocHeap
 However, mspan that stack uses is initialized differently than mspan that heap uses.
-See: https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mheap.go#L1398-L1446
+See: https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L1398-L1446
 
 Read https://www.bytelab.codes/what-is-memory-part-3-registers-stacks-and-threads
 In stack section, mention stack pointer (SP) register and frame pointer (FP) register (if it's relevant to the discussion).
@@ -720,7 +672,7 @@ Explain stackguard. Why don't just use stack.lo and stack.hi as the stack bounds
 | ------- |
 | Heap    |
 
-Mention stack init https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L167-L167
+Mention stack init https://github.com/golang/go/blob/go1.24.0/src/runtime/stack.go#L167-L167
 
 Mention system stack of each thread is non-preemptible and the GC doesn't scan system stack.
 
@@ -738,7 +690,7 @@ See: https://draven.co/golang/docs/part3-runtime/ch06-concurrency/golang-gorouti
 
 For main thread M, M's system stack g0 is allocated by the kernel.
 Go runtime creates an instance of Go runtime stack with stack.hi-stack.lo = 64*1024.
-See https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/asm_amd64.s#L170-L176
+See https://github.com/golang/go/blob/go1.24.0/src/runtime/asm_amd64.s#L170-L176
 
 For non-main thread M,
 - In Linux, m's system stack g0 is allocated by Go runtime.
@@ -822,9 +774,16 @@ Stackguard, see the following. Framesize is the maximum size of the stack frame,
 SP + X means move SP up by X bytes, while SP - X means move SP down by X bytes.
 - https://kirk91.github.io/posts/2d571d09/
 - https://www.sobyte.net/post/2022-01/go-stack/#goroutine-stack-operations
-- https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/cmd/internal/obj/arm/obj5.go#L712-L746
+- https://github.com/golang/go/blob/go1.24.0/src/cmd/internal/obj/arm/obj5.go#L712-L746
 
 this case StackSmall < framesize < Stackbug means that if frame size of next function is greater than SmallStack and less than SmallBig,
 but if the address space [SP -> function frame size] still fits within the address space [g.stack.hi -> StackSmall], then we can continue executing the function.
 
 == Mention the importance of memory arena between [g.stackguard - StackSmall -> g.stack.lo]
+
+Mention that each thread has its own stack. When creating thread with clone (what Go does), the stack space must be allocated beforehand and the starting address of the stack must be specified.
+See: https://github.com/golang/go/blob/go1.24.0/src/runtime/os_linux.go#L186-L186
+When Go clones a thread, it passes M.g0.stack.hi as the stack address.
+See: https://grok.com/chat/ce58ca57-b84a-41ca-8ecf-54498ab0c6ba
+
+## Escape Analysis
