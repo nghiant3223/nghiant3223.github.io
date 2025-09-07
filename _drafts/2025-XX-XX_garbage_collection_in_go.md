@@ -7,6 +7,7 @@ date: 2025-06-03
 Sources:
 - https://www.sobyte.net/post/2022-04/go-gc/
 - https://www.sobyte.net/post/2021-12/golang-garbage-collector/
+- https://groups.google.com/g/golang-nuts/c/eW1weV-FH1w
 
 Explain that Go GC uses tri-color mark-and-sweep algorithm. Also explain what write barrier is and how it helps the algorithm.
 See: https://www.notion.so/nghiant3223/Tri-color-Mark-Sweep-GC-20758cf2502e80d087a2c700988767b2

@@ -5,9 +5,6 @@ date: 2025-04-15
 image: https://raw.githubusercontent.com/nghiant3223/nghiant3223.github.io/refs/heads/main/assets/2025-03-11-go-scheduling/primitive_scheduler.png
 ---
 
-<button id="scrollTop" title="Go to top">↑</button>
-<button id="scrollBottom" title="Go to bottom">↓</button>
-
 # Go Scheduler
 
 * [Introduction](#introduction)
@@ -1111,3 +1108,7 @@ Hope you will find this knowledge useful in writing more efficient and reliable 
 - <div><span id="ref-1"/><span id="ref-2"/><span id="ref-3"/>[1], [2], [3] Abraham Silberschatz, Peter B. Galvin, Greg Gagne. <a href="https://www.amazon.com/Operating-System-Concepts-Abraham-Silberschatz/dp/1119800366/ref=zg-te-pba_d_sccl_3_1/138-7692107-2007040"><i>Operating System Concepts.</i></a></div>
 
 <div class="giscus" id="reaction"></div>
+
+<button id="scrollTop" title="Go to top">↑</button>
+<button id="scrollBottom" title="Go to bottom">↓</button>
+
