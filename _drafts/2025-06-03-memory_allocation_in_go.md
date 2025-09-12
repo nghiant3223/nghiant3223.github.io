@@ -802,7 +802,7 @@ This logic is illustrated in the following diagram.
 flowchart LR
 
 style C fill:#d6e8d5
-style D fill:#add8e6
+style D fill:#b1ddf0
 
 0((Start)) --> A{Any free size class<br/>object in<br/>the cached<br/>span?}
 A --> |Yes|Z[Return the free<br/>size class<br/>object]
@@ -908,7 +908,7 @@ The allocation logic is described in the following diagram.
 
 flowchart LR
 
-style C fill:#add8e6
+style C fill:#b1ddf0
 style G fill:#d6e8d5
 
 A((Start)) --> B[Align mcache.tinyoffset based on the requested size]
@@ -999,9 +999,163 @@ Unlike small objects, large objects do not vary by span class: *scan* spans are 
 
 ## Stack Management
 
-### Thread Stack vs. Goroutine Stack
+As discussed in the [Go Scheduler](https://nghiant3223.github.io/2025/04/15/go-scheduler.html) post, both Go runtime code and user code run on threads managed by the operating system.
+Each thread has its own stack—a contiguous block of memory that holds stack frames, which in turn store function parameters, local variables, and return addresses.
 
-### Segmented Stack vs. Contiguous Stack 
+In Go, a thread's stack is called the *system stack*, while a goroutine's stack is simply called the *stack*.
+To manage execution contexts, the runtime introduces the [`m`]() (thread) and [`g`]() (goroutine) abstractions.
+Every [`g`]() has a [`stack`]() field recording the start and end addresses of its stack.
+Each [`m`]() has a special [`g0`]() goroutine, whose stack represents the system stack.
+The runtime uses [`g0`]() when performing operations that must run on the system stack rather than a goroutine stack, such as growing or shrinking a goroutine's stack.
+
+The system stack of the main thread is allocated by the kernel when a Go process starts.
+For non-main threads, their stack are allocated by either the kernel or the Go runtime, depending on the operating system and whether [CGO](https://go.dev/wiki/cgo) is used.
+On Darwin and Windows, the kernel always allocates the system stack for non-main threads.
+On Linux, however, the Go runtime allocates a system stack for non-main threads unless CGO is used.
+
+| <img src="/assets/2025-06-03-memory_allocation_in_go/darwin_windows_memory_layout.png" width=200/> | <img src="/assets/2025-06-03-memory_allocation_in_go/linux_memory_layout.png" width=200/> |
+|:--------------------------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------------------:|
+|                        Virtual memory layout of processes in Darwin/Windows                        |                        Virtual memory layout of processes in Linux                        |
+
+A system stack allocated by the kernel resides outside Go's managed virtual memory space, while a system stack allocated by the runtime is created inside it.
+The kernel ensures that its system stacks do not collide with Go's managed memory.
+Kernel-allocated system stacks typically range from 512 KB to several MB, whereas system stacks allocated by Go are fixed at [16 KB](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L2242-L2242).
+By contrast, goroutine stacks start with [2 KB](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L5044-L5044) and can grow or shrink dynamically as needed.
+
+### Allocating Stack: [`stackalloc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L330-L438)
+
+Stacks managed by the Go runtime—whether system stacks or goroutine stacks—are accommodated in [spans](#span-and-size-class), just like heap objects.
+You can think of a stack as a special kind of heap object dedicated to holding local variables and function call frames during execution of Go runtime or user code.
+
+Stacks are normally allocated from the current `P`’s [`mcache`]().
+If garbage collection is in progress, when the number of processors `P` changes, or if the current thread is detached from its `P` during a system call, stacks are instead allocated from the global pools.
+There are two pools: [*small*](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L144-L153) for stack smaller than 32 KB, or [*large*](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L161-L165) pool for stacks equal to or bigger than 32 KB.
+
+Goroutines starts wit small stack thus allocated by the small stack pool, but when it grows beyond 32 KB due to calling more functions or allocating more stack variables, the large stack pool is used instead.
+This behavior will be described in [Stack Growth](#stack-growth) section.
+
+#### Allocating Stack from Pool
+
+The small stack pool is a four-entry array of doubly linked lists of [`mspan`](), each span holding metadata for a block of virtual memory.
+All spans in this pool belong to span class 0 and cover four contiguous pages, hence each span takes up 32 KB. 
+Each entry in the array corresponds to a stack order, which determines stack size: order 0 → every stack is 2 KB, order 1 → every stack is 4 KB, order 2 → every stack is 8 KB, and order 3 → every stack is 16 KB.
+
+You might wonder why stacks are categorized into orders and sizes this way.
+The reason is that goroutine stacks are contiguous memory regions that double in size when they grow.
+This behavior will be explained in more detail in the [Stack Growth](#stack-growth) section.
+
+| <img id="tiny-span" src="/assets/2025-06-03-memory_allocation_in_go/small_stack_pool.png" width=500> |
+|:----------------------------------------------------------------------------------------------------:|
+|                                         Pool of small stack                                          |
+
+When a stack smaller than 32 KB is requested, the runtime first determines the appropriate order based on the requested size.
+It then checks the head of the linked list for that order to find an available span.
+If no span is available, it requests one from [`mheap`]() (see [Span Allocation](#span-allocation)) and splits it into stacks of the required order.
+Once a span is ready, Go runtime takes the first available stack, updates the span's metadata, and returns the stack.
+
+Large stack pool is as simple as a linked list of stack of various sizes, each stack contained within an [`mspan`]() of span class 0.
+When a stack equal to or larger than 32 KB is requested, the first stack is popped from the linked list and returned.
+If the list is empty, it requests a new span from [`mheap`]() (see [Span Allocation](#span-allocation)).
+
+Note that since stack pools are global, and can be accessed by multiple threads concurrently
+Therefore, they are protected by a mutex lock to ensure thread safety with the trade-off of lower throughput due to lock contention.
+
+#### Allocating Stack from Cache
+
+In order to reduce lock contention when allocating stack, each processor `P` maintains its owns stack cache in its [`mcache`]().
+Similar to small stack pool, the stack cache is a four-entry array of singly linked lists of free stacks, each entry corresponding to a stack order.
+
+When serving a small stack allocation request, the runtime first checks the stack cache of the current `P` for an available stack.
+If none is available, it refills the cache by requests some stacks from the small stack pool, caches them, and return the first one.
+Large stacks aren't served from the stack cache, they are always allocated from the large stack pool directly.
+
+### Stack Growth
+
+#### Segmented Stack
+
+Historically, Go used a segmented stack approach.
+Each goroutine started with a small stack.
+If a function call required more stack space than available in the current stack, a new, another stack would be allocated and linked to the previous one.
+When the function returned, the new stack would be deallocated, and execution would continue on the previous stack.
+This process was known as a *stack split*.
+
+The below code snippet and figure illustrate a scenario where the `ingest` function process data from a file line by line, where stack frame of `read` scatters across two stacks.
+If the stack pointer reach some limit (the so-called [*stack guard*](#stack-guard), which will be discussed later), calls to `read` or `process` may trigger a stack split.
+Note that goroutine stacks are not contiguous in this approach.
+
+```go
+func ingest(path string) {
+  ...
+  for {
+    line, err := read(file) // Causes stack split.
+    if err == io.EOF {
+      break
+    }
+    process(line)
+  }
+  ...
+}
+```
+
+| <img id="tiny-span" src="/assets/2025-06-03-memory_allocation_in_go/stack_split.png"> |
+|:-------------------------------------------------------------------------------------:|
+|                        Stack split in segmented stack strategy                        |
+
+However, this segmented stack approach had a performance issue known as the *hot stack split* problem.
+If a function repeatedly need frequent allocation and deallocation of stacks within a tight loop, the entire process would incur a significant performance penalty.
+When the function returns, the newly allocated stack are deallocated.
+Since [each stack split takes 60 nanosecond](https://youtu.be/-K11rY57K7k?si=iGszQYxfDvDBHwWu), the issue leads to significant overhead as it happens for every iteration of the loop.
+
+One trick to avoid this issue is to add *padding* to the stack frame of functions that are called frequently within loops.
+We can allocate dummy local variables to increase the stack frame size, thus reducing the likelihood of stack splits.
+But from the perspective of Go programmers, this is error-prone and reduces code readability.
+
+#### Contiguous Stack
+
+To mitigate the hot stack split problem, Go after version 1.4 switches to an approach so-called [*contiguous stacks*](https://docs.google.com/document/d/1wAaf1rYoM4S4gtnPh0zOlGzWtrZFQ5suE8qr2sD8uWQ/pub).
+When goroutine stack needs to grow, a new larger stack twice bigger than the current one is allocated.
+The content of the current stack is copied to the new stack, and the goroutine switches to use the new stack.
+
+| <img id="tiny-span" src="/assets/2025-06-03-memory_allocation_in_go/copy_stack.png" width=600> |
+|:----------------------------------------------------------------------------------------------:|
+|                            Copy stack in contiguous stack strategy                             |
+
+The figure above illustrates a contiguous stack and shows that it is not shrunk when underutilized (e.g., after the first iteration completes).
+This behavior helps mitigate the hot-split problem.
+
+If goroutine stacks were never shrunk, however, memory can be wasted if it grows significantly during peak usage but later leaves most of that space unused.
+In fact, with contiguous stack scheme, a goroutine stack is shrunk during a garbage collector cycle rather than when a function returns.
+If the total in-used stack size is less than a quarter of the current stack size, a new smaller stack half the size of the current one is allocated.
+Content of the current stack is copied to the new stack, and the goroutine switches to use the new stack.
+See [`shrinkstack`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L1179-L1238) for more details.
+
+As mentioned in the [Go Scheduler](https://nghiant3223.github.io/2025/04/15/go-scheduler.html#cooperative-preemption-since-go-114) post, in order for goroutine stack to grow, some checks must be inserted at function prologues.
+The check is basically CPU instruction and costs CPU cycles to execute.
+For small functions that are called frequently, this overhead can be significant.
+To mitigate this overhead, small functions are marked with `//go:nosplit` directive, which tells the [compiler not to insert stack growth checks in their prologues](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/cmd/internal/obj/x86/obj6.go#L679-L681).
+
+> ⚠️ Don't be confused.
+> *Split* in `//go:nosplit` sounds relate to stack split in segmented stack approach, but it actually means stack growth check in contiguous stack approach as well.
+
+#### Stack Guard
+
+When a function is called, the stack pointer is decreased by the size of the function's stack frame.
+The updated pointer is then checked against the [*stack guard*](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L93-L99), a value used to determine whether a stack growth is required.
+In Linux, the stack guard is 928 bytes above the bottom of the stack, in which [`StackNosplitBase`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L8-L14) takes 800 bytes and [`StackSmall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L19-L25) takes 128 bytes.
+
+Why isn't the stack pointer checked directly against the stack bottom?  
+The reasons are explained in this [comment](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L17-L66) in the Go runtime source code, which I’ll summarize here.
+
+First, some space must be reserved (via [`StackNosplitBase`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L8-L14)) for functions that are marked with `//go:nosplit`, meaning they do not perform stack overflow checks.
+For example, [`morestack`]()—which itself handles stack growth—must always fit entirely within the available stack.
+
+Second, it acts as an optimization for small functions whose stack frames are smaller than [`StackSmall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L19-L25).
+Instead of adjusting the stack pointer and then comparing it against the guard, the runtime can simply check whether the current stack pointer is already below the guard, saving one CPU instruction per function call.
+
+
+### Reusing Stack
+
+When are stack returned to the pool for reuse?
 
 https://docs.google.com/document/u/0/d/1wAaf1rYoM4S4gtnPh0zOlGzWtrZFQ5suE8qr2sD8uWQ/mobilebasic
 
