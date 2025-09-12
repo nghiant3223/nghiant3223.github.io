@@ -1116,9 +1116,9 @@ To mitigate the hot stack split problem, Go after version 1.4 switches to an app
 When goroutine stack needs to grow, a new larger stack twice bigger than the current one is allocated.
 The content of the current stack is copied to the new stack, and the goroutine switches to use the new stack.
 
-| <img id="tiny-span" src="/assets/2025-06-03-memory_allocation_in_go/copy_stack.png" width=600> |
-|:----------------------------------------------------------------------------------------------:|
-|                            Copy stack in contiguous stack strategy                             |
+| <img src="/assets/2025-06-03-memory_allocation_in_go/copy_stack.png" width=600> |
+|:-------------------------------------------------------------------------------:|
+|                     Copy stack in contiguous stack strategy                     |
 
 The figure above illustrates a contiguous stack and shows that it is not shrunk when underutilized (e.g., after the first iteration completes).
 This behavior helps mitigate the hot-split problem.
@@ -1139,176 +1139,38 @@ To mitigate this overhead, small functions are marked with `//go:nosplit` direct
 
 #### Stack Guard
 
-When a function is called, the stack pointer is decreased by the size of the function's stack frame.
-The updated pointer is then checked against the [*stack guard*](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L93-L99), a value used to determine whether a stack growth is required.
-In Linux, the stack guard is 928 bytes above the bottom of the stack, in which [`StackNosplitBase`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L8-L14) takes 800 bytes and [`StackSmall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L19-L25) takes 128 bytes.
+When a function is called, the stack pointer is decreased by the size of the function’s stack frame.
+It is then checked against the goroutine's [*stack guard*](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L405-L405), which determines whether stack growth is required.
+The stack guard consists of two parts: [`StackNosplitBase`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L8-L14) and [`StackSmall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L19-L25).
+On Linux, this places the guard at 928 bytes above the stack bottom—800 bytes for [`StackNosplitBase`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L8-L14) and 128 bytes for [`StackSmall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L19-L26).
 
-Why isn't the stack pointer checked directly against the stack bottom?  
-The reasons are explained in this [comment](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L17-L66) in the Go runtime source code, which I’ll summarize here.
+| <img src="/assets/2025-06-03-memory_allocation_in_go/stack_guard.png" width=500> |
+|:--------------------------------------------------------------------------------:|
+|                 The position of stack guard in a goroutine stack                 |
 
-First, some space must be reserved (via [`StackNosplitBase`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L8-L14)) for functions that are marked with `//go:nosplit`, meaning they do not perform stack overflow checks.
-For example, [`morestack`]()—which itself handles stack growth—must always fit entirely within the available stack.
 
-Second, it acts as an optimization for small functions whose stack frames are smaller than [`StackSmall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L19-L25).
-Instead of adjusting the stack pointer and then comparing it against the guard, the runtime can simply check whether the current stack pointer is already below the guard, saving one CPU instruction per function call.
+But overflow means that stack pointer goes beyond the stack, so why is stack pointer checked against stack guard rather than the bottom of the stack?
+The reasons are explained in this [comment](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L17-L66) in the Go runtime source code.
+Let me explain them in simpler terms.
 
+First, since Go allows functions not to perform stack grow checks by marking them with `//go:nosplit`, space equal to [`StackNosplitBase`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L8-L14) must be reserved so that they can execute safely without referencing any invalid address.
+For example, [`morestack`]()—which itself handles stack growth—must have its entire stack frame fit within the allocated stack.
+
+Second, it serves as an optimization for small functions having stack frame smaller than [`StackSmall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L19-L26).
+When these functions are called, Go doesn't bother decreasing the stack pointer and checking it against the stack guard.
+Instead, it simply checks whether the current stack pointer is below the stack guard, saving one CPU instruction per function call by skipping the stack pointer adjustment.
 
 ### Reusing Stack
 
-When are stack returned to the pool for reuse?
-
-https://docs.google.com/document/u/0/d/1wAaf1rYoM4S4gtnPh0zOlGzWtrZFQ5suE8qr2sD8uWQ/mobilebasic
-
-Mention stack of main thread and other thread in Go.
-
-Mention that each thread created with clone is allocated with a new thread, as in https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L2242-L2242
-This is subject to the requirement of clone: the caller of clone must setup stack space for child thread before calling clone.
-The parameter `stack` in `clone` is the starting address (higher address) of the stack space for the child thread.
-The stack size of threads other than main is 16KB, see https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L2242-L2242
-While stack size of main thread is controlled by the kernel.
-
-Mention that the memory space used by stack is also mspan.
-
-Mention stack allocation use mheap.allocSpan with typ=spanAllocStack (allocManual), while heap allocation use mheap.allocSpan with typ=spanAllocHeap
-However, mspan that stack uses is initialized differently than mspan that heap uses.
-See: https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L1398-L1446
-
-Read https://www.bytelab.codes/what-is-memory-part-3-registers-stacks-and-threads
-In stack section, mention stack pointer (SP) register and frame pointer (FP) register (if it's relevant to the discussion).
-See https://substackcdn.com/image/fetch/f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F35358ebb-0af2-482e-a359-36932f60b1a5_399x299.png
-SP is physically a register in CPU, it points to the top of the stack.
-FP is a pointer to the current function's stack frame, it is used to access local variables and function parameters.
-Mention how Go handle stack operation:
-- when new variable is allocated on stack, it decreases the SP register
-- when a function returns, it increases the SP register.
-- because the size of variables is determined at compile time, the SP register is always increased by a fixed amount.
-
-Explain how SP, FP is set to stack.lo, stack.hi (gobuf) in Go runtime.
-Explain stackguard. Why don't just use stack.lo and stack.hi as the stack bounds?
-
-| Stack   |
-|---------|
-|         | <- hi
-|         |
-|         | <- lo
-| ------- |
-| Heap    |
-
-Mention stack init https://github.com/golang/go/blob/go1.24.0/src/runtime/stack.go#L167-L167
-
-Mention system stack of each thread is non-preemptible and the GC doesn't scan system stack.
-
-Mention that Go initially used segmented stack, but now it uses contiguous stack.
-Watch: https://youtu.be/-K11rY57K7k?si=YZrRRgGyZXAs7tes
-
-Mention escape analysis.
-
-===
-
-Explain more about system stack g0.
-See: https://go.dev/src/runtime/HACKING#stacks
-See: https://www.sobyte.net/post/2022-07/go-gmp/#4-the-role-of-g0
-See: https://draven.co/golang/docs/part3-runtime/ch06-concurrency/golang-goroutine/#%E5%88%9D%E5%A7%8B%E5%8C%96%E7%BB%93%E6%9E%84%E4%BD%93
-
-For main thread M, M's system stack g0 is allocated by the kernel.
-Go runtime creates an instance of Go runtime stack with stack.hi-stack.lo = 64*1024.
-See https://github.com/golang/go/blob/go1.24.0/src/runtime/asm_amd64.s#L170-L176
-
-For non-main thread M,
-- In Linux, m's system stack g0 is allocated by Go runtime.
-- In Darwin and Windows, m's system stack g0 is allocated by the kernel.
-  if iscgo || mStackIsSystemAllocated() {
-    mp.g0 = malg(-1)
-  } else {
-    mp.g0 = malg(16384 * sys.StackGuardMultiplier)
-  }
-
-Below is how system stack g0 is allocated in Darwin:
-The Go runtime uses a clever approach that combines information gathering before thread creation with runtime stack discovery when the new thread starts executing. Here's how it works:
-1. Pre-Creation Setup (in newosproc)
-   Before calling pthread_create, the Go runtime in newosproc function:
-```cassandraql
-	// Find out OS stack size for our own stack guard.
-	var stacksize uintptr
-	if pthread_attr_getstacksize(&attr, &stacksize) != 0 {
-		writeErrStr(failthreadcreate)
-		exit(1)
-	}
-	mp.g0.stack.hi = stacksize // for mstart
-```
-   Calls pthread_attr_getstacksize to get the size of the stack that pthread will allocate
-   Stores this size in mp.g0.stack.hi (note: this is initially just the size, not the actual address)
-2. Thread Starts at mstart_stub
-   When pthread_create creates the new thread, it starts execution at mstart_stub. Looking at the Darwin ARM64 assembly:
-```
-TEXT runtime·mstart_stub(SB),NOSPLIT,$160
-	// R0 points to the m.
-	// We are already on m's g0 stack.
-
-	// Save callee-save registers.
-	SAVE_R19_TO_R28(8)
-	SAVE_F8_TO_F15(88)
-
-	MOVD	m_g0(R0), g
-	BL	·save_g(SB)
-```
-   The key insight is in the comment: "We are already on m's g0 stack." At this point, the new thread is executing on the pthread-allocated stack.
-3. Stack Address Discovery in mstart0
-   The actual stack address discovery happens in mstart0:
-```
-	gp := getg()
-
-	osStack := gp.stack.lo == 0
-	if osStack {
-		// Initialize stack bounds from system stack.
-		// Cgo may have left stack size in stack.hi.
-		// minit may update the stack bounds.
-		//
-		// Note: these bounds may not be very accurate.
-		// We set hi to &size, but there are things above
-		// it. The 1024 is supposed to compensate this,
-		// but is somewhat arbitrary.
-		size := gp.stack.hi
-		if size == 0 {
-			size = 16384 * sys.StackGuardMultiplier
-		}
-		gp.stack.hi = uintptr(noescape(unsafe.Pointer(&size)))
-		gp.stack.lo = gp.stack.hi - size + 1024
-	}
-```
-Here's the crucial technique:
-Current Stack Pointer: &size gives the address of a local variable on the current stack
-Stack High Address: This becomes gp.stack.hi - the high end of the stack
-Stack Low Address: Calculated as gp.stack.hi - size + 1024, where size is the stack size obtained earlier
-
-===
-
-Mention sys.NotInHeap, finalizer, write barrier.
-sys.NotInHeap prevents the object from being allocated in Go heap, so it is not scanned by GC.
-It's used for objects that are not managed by Go, and write barrier is omitted.
-If we 'new' and object with sys.NotInHeap, compilation error will be raised.
-
-===
-
-Explain how stackguard relates to stack expansion
-
-Stackguard, see the following. Framesize is the maximum size of the stack frame, which is determined at compile time.
-SP + X means move SP up by X bytes, while SP - X means move SP down by X bytes.
-- https://kirk91.github.io/posts/2d571d09/
-- https://www.sobyte.net/post/2022-01/go-stack/#goroutine-stack-operations
-- https://github.com/golang/go/blob/go1.24.0/src/cmd/internal/obj/arm/obj5.go#L712-L746
-
-this case StackSmall < framesize < Stackbug means that if frame size of next function is greater than SmallStack and less than SmallBig,
-but if the address space [SP -> function frame size] still fits within the address space [g.stack.hi -> StackSmall], then we can continue executing the function.
-
-== Mention the importance of memory arena between [g.stackguard - StackSmall -> g.stack.lo]
-
-Mention that each thread has its own stack. When creating thread with clone (what Go does), the stack space must be allocated beforehand and the starting address of the stack must be specified.
-See: https://github.com/golang/go/blob/go1.24.0/src/runtime/os_linux.go#L186-L186
-When Go clones a thread, it passes M.g0.stack.hi as the stack address.
-See: https://grok.com/chat/ce58ca57-b84a-41ca-8ecf-54498ab0c6ba
+When goroutine finishes its execution, goroutine stack is shrunk due to having too much available space, or system thread managed by Go runtime exits, their stacks are marked as reusable.
+If the goroutine is currently attached with a processor `P` and the size of `P`'s stack cache is small enough, its stack is returned to the stack cache of that `P`.
+Otherwise, the stack is returned to the global pool—either small stack pool or large stack pool, depending on the size of the stack.
+When returned to the global pool, the stack will be freed and the corresponding page of memory will be returned to kernel if garbage collection is not in progress.
 
 ## Stack or Heap?
+
+Mention escape analysis.
+Mention sys.NotInHeap.
 
 ## Case Studies
 
