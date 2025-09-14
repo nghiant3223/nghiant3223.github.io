@@ -220,8 +220,8 @@ The compiler also emits instructions to deallocate the stack frame when the func
 For example, `MOVD` is used to store a variable onto the stack, while `ADD` is used to increase the stack pointer thus deallocate the stack frame.
 
 | <img src="/assets/2025-05-29-fundamental_of_virtual_memory/general_stack_frame.png" width=300> |
-|:----------------------------------------------------------------------------------------:|
-|                            General stack frame <sup>10</sup>                             |
+|:----------------------------------------------------------------------------------------------:|
+|                               General stack frame <sup>10</sup>                                |
 
 The figure above illustrates a general stack frame layout for a scenario in which function `P` calls function `Q`.
 The frame for the currently executing procedure is always at the top of the stack.
@@ -242,7 +242,11 @@ In such case, we need to allocate the variable on the heap instead.
 ## Heap Allocation
 
 Allocation variables on the heap means finding a free memory block in from the heap segment or resizing the heap if there is no such memory block.
-The current limit of the heap is referred to as the *program break*, or *brk* as depicted in the above [figure](#virtual_memory_layout.png).
+The current limit of the heap is referred to as the *program break* or abbreviated as *brk*, as depicted in the below figure.
+
+| <img src="/assets/2025-05-29-fundamental_of_virtual_memory/virtual_memory_layout.png" width=400> |
+|:------------------------------------------------------------------------------------------------:|
+|                      The position of program break in virtual memory layout                      |
 
 Resizing the heap is just simple as telling the kernel to adjust its idea of where the process’s program break is.
 After the program break is increased, the program may access any address in the newly allocated area, but no physical memory pages are allocated yet.
@@ -290,8 +294,8 @@ Conversely, if the memory mapped region is shared, then all processes that share
 
 Demand paging also works for memory mapping.
 When a user process's address space is expanded, kernel does not immediately allocate any physical memory for these new virtual addresses.
-Instead, the kernel implements demand paging, where a page will only be allocated from physical memory and mapped to the address space when the user process tries to write to that new virtual memory address<sup>[N](https://ryanstan.com/linux-demand-paging-anon-memory.html)</sup>.
-The read accesses will result in creation of a page table entry that references a special physical page filled with zeroes<sup>[N](https://www.kernel.org/doc/html/v5.16/admin-guide/mm/concepts.html#anonymous-memory)</sup>.
+Instead, the kernel implements demand paging, where a page will only be allocated from physical memory and mapped to the address space when the user process tries to write to that new virtual memory address<sup>[13](https://ryanstan.com/linux-demand-paging-anon-memory.html)</sup>.
+The read accesses will result in creation of a page table entry that references a special physical page filled with zeroes<sup>[14](https://www.kernel.org/doc/html/v5.16/admin-guide/mm/concepts.html#anonymous-memory)</sup>.
 
 Since anonymous memory mappings are not backed by a file and are always zero-initialized, they are ideal for programs that implement their own memory allocation strategies—such as Go—rather than relying on the operating system's default allocators like `malloc` and `free`.
 This allows greater control over memory management, enabling features like custom allocators or garbage collection tailored to the runtime's needs.

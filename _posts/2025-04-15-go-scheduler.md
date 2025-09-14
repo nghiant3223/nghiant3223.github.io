@@ -7,6 +7,8 @@ image: https://raw.githubusercontent.com/nghiant3223/nghiant3223.github.io/refs/
 
 # Go Scheduler
 
+## Contents
+
 * [Introduction](#introduction)
 * [Compilation and Go Runtime](#compilation-and-go-runtime)
 * [Primitive Scheduler](#primitive-scheduler)
@@ -145,9 +147,9 @@ This cause poor locality and excessive context switch overhead.
 Child goroutine usually wants to communicate with its parent goroutine.
 Therefore, making child goroutine run on the same thread as its parent goroutine is more performant.
 
-Thirdly, as Go's been using [Thread-caching Malloc](https://google.github.io/tcmalloc/design.html), every thread `M` has a thread-local cache `mcache` so that it can use for allocation or to hold free memory.
-While `mcache` is only used by `M`s executing Go code, it is even attached with `M`s blocking in a system call, which don't use `mcache` at all.
-An `mcache` can take up to 2MB of memory, and it is not freed until thread `M` is destroyed.
+Thirdly, as Go's been using [Thread-caching Malloc](https://google.github.io/tcmalloc/design.html), every thread `M` has a thread-local cache [`mcache`](https://nghiant3223.github.io/2025/06/03/memory_allocation_in_go.html#processors-memory-allocator-mcache) so that it can use for allocation or to hold free memory.
+While [`mcache`](https://nghiant3223.github.io/2025/06/03/memory_allocation_in_go.html#processors-memory-allocator-mcache) is only used by `M`s executing Go code, it is even attached with `M`s blocking in a system call, which don't use [`mcache`](https://nghiant3223.github.io/2025/06/03/memory_allocation_in_go.html#processors-memory-allocator-mcache) at all.
+An [`mcache`](https://nghiant3223.github.io/2025/06/03/memory_allocation_in_go.html#processors-memory-allocator-mcache) can take up to 2MB of memory, and it is not freed until thread `M` is destroyed.
 Because the ratio between `M`s running Go code and all `M`s can be as high as 1:100 (too many threads are blocking in system call), this could lead to excessive resource consumption and poor data locality.
 
 ## Scheduler Enhancement
@@ -167,7 +169,7 @@ Thus, this proposal addresses the first and second issues as described in the la
 |                 Proposal 1 for scheduler enhancement                  |
 
 However, it can't resolve the third issue.
-When many threads `M` are blocked in system calls, their `mcache` stays attached, causing high memory usage by the Go scheduler itself, not to mention the memory usage of the program that we—Go programmers—write.
+When many threads `M` are blocked in system calls, their [`mcache`](https://nghiant3223.github.io/2025/06/03/memory_allocation_in_go.html#processors-memory-allocator-mcache) stays attached, causing high memory usage by the Go scheduler itself, not to mention the memory usage of the program that we—Go programmers—write.
 
 It also introduces another performance problem.
 In order to avoid starving goroutines in a blocked `M`'s local run queue like `M1` in the figure above, the scheduler should allow other threads to *steal* goroutine from it.
@@ -177,10 +179,10 @@ However, with a large number of blocked threads, scanning all of them to find a 
 
 This proposal is described in [Scalable Go Scheduler Design](https://docs.google.com/document/d/1TTj4T2JO42uD5ID9e89oa0sLKhJYD0Y_kqxDv3I3XMw), where the notion of *logical* processor `P` is introduced.
 By *logical*, it means that `P` pretends to execute goroutine code, but in practice, it is thread `M` associated with `P` that actually performs the execution.
-Thread's local run queue and `mcache` are now owned by `P`.
+Thread's local run queue and [`mcache`](https://nghiant3223.github.io/2025/06/03/memory_allocation_in_go.html#processors-memory-allocator-mcache) are now owned by `P`.
 
 This proposal effectively addresses open issues in the last section.
-As `mcache` is now attached to `P` instead of `M` and `M` is detached from `P` when `G` makes system call, the memory consumption stays low when there are a large number of `M`s entering system calls.
+As [`mcache`](https://nghiant3223.github.io/2025/06/03/memory_allocation_in_go.html#processors-memory-allocator-mcache) is now attached to `P` instead of `M` and `M` is detached from `P` when `G` makes system call, the memory consumption stays low when there are a large number of `M`s entering system calls.
 Also, as the number of `P` is limited, the *stealing* mechanism is efficient.
 
 | <img src="/assets/2025-03-11-go-scheduling/proposal_2.png" width=500> |
@@ -276,8 +278,8 @@ By array-based and fixed-size with 256 slots, it allows better cache locality an
 Fixed-size is safe for `P`'s local run queues as we also have the global run queue as a backup.
 By circular, it allows efficiently adding and removing goroutines without needing to shift elements around.
 
-Each `P` instance also maintains references to some memory management data structures such as [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) and [`pageCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagecache.go#L14-L22).
-[`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) serves as the front-end in [Thread-Caching Malloc](https://google.github.io/tcmalloc/design.html) model and is used by `P` to allocate micro and small objects.
+Each `P` instance also maintains references to some memory management data structures such as [[`mcache`](https://nghiant3223.github.io/2025/06/03/memory_allocation_in_go.html#processors-memory-allocator-mcache)](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) and [`pageCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagecache.go#L14-L22).
+[[`mcache`](https://nghiant3223.github.io/2025/06/03/memory_allocation_in_go.html#processors-memory-allocator-mcache)](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) serves as the front-end in [Thread-Caching Malloc](https://google.github.io/tcmalloc/design.html) model and is used by `P` to allocate micro and small objects.
 [`pageCache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagecache.go#L14-L22), on the other hand, enables the memory allocator to fetch memory pages without acquiring the [heap lock](https://www.ibm.com/docs/en/sdk-java-technology/8?topic=management-heap-allocation#the-allocator), thereby improving performance under high concurrency.
 
 In order for a Go program to work well with [sleeps](https://pkg.go.dev/time#Sleep), [timeouts](https://pkg.go.dev/time#After) or [intervals](https://pkg.go.dev/time#Tick), `P` also manages timers implemented by [min-heap](https://en.wikipedia.org/wiki/Heap_(data_structure)) data structure, where the nearest timer is at the top of the heap.
@@ -1089,14 +1091,15 @@ If all other goroutines exit, the program crashes.
 The Go scheduler is a powerful and efficient system that enables lightweight concurrency through goroutines.
 In this blog, we explored its evolution—from the primitive model to the GMP architecture—and key components like goroutine creation, preemption, syscall handling, and netpoll integration.
 
-Hope you will find this knowledge useful in writing more efficient and reliable Go programs.
+I hope you find this knowledge useful for writing more efficient and reliable Go programs.
+If you have any concerns, feel free to leave a comment.
 <span>
-    If you really enjoy my content, please consider
+  If you really enjoyed my content, please consider
     <span>
       <a href="https://buymeacoffee.com/nghiant3221" target="_blank">
-        <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 45px; width: 162px;">
-      </a>
-    </span>! 😄
+      <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 2em;">
+    </a>
+  </span>! 😄
 </span>
 
 ## References

@@ -2,9 +2,34 @@
 layout: post
 title: "Memory Allocation in Go"
 date: 2025-06-03
+image: https://raw.githubusercontent.com/nghiant3223/nghiant3223.github.io/refs/heads/main/assets/2025-06-03-memory_allocation_in_go/memory_allocator_recap.png
 ---
 
 # Memory Allocation in Go
+
+## Contents
+
+- [Introduction](#introduction)
+- [Go's View of Virtual Memory](#gos-view-of-virtual-memory)
+  - [Arena and Page](#arena-and-page)
+  - [Span and Size Class](#span-and-size-class)
+  - [Span Class](#span-class)
+  - [Span Set](#span-set)
+  - [Heap Bits and Malloc Header](#heap-bits-and-malloc-header)
+- [Heap Management](#heap-management)
+  - [Span Allocation: `mheap.alloc`](#span-allocation-mheapalloc)
+  - [Central Span Manager: `mcentral`](#central-span-manager-mcentral)
+  - [Processor's Memory Allocator: `mcache`](#processors-memory-allocator-mcache)
+- [Heap Allocation](#heap-allocation)
+  - [Tiny Objects: `mallocgcTiny`](#tiny-objects-mallocgctiny)
+  - [Small Objects: `mallocgcSmall*`](#small-objects-mallocgcsmall-)
+  - [Large Objects: `mallocgcLarge`](#large-objects-mallocgclarge)
+- [Stack Management](#stack-management)
+  - [Allocating Stack: `stackalloc`](#allocating-stack-stackalloc)
+  - [Stack Growth: `morestack`](#stack-growth-morestack)
+  - [Reusing Stack: `stackfree`](#reusing-stack-stackfree)
+- [Stack or Heap?](#stack-or-heap)
+- [Case Studies](#case-studies)
 
 ## Disclaimer
 
@@ -16,17 +41,27 @@ Feel free to correct me or give suggestions in the comment section at the very b
 
 ## Introduction
 
+Memory allocation is at the heart of every programming language runtime, and Go is no exception.
+Efficient allocation and management of memory directly affect the performance, scalability, and responsiveness of Go applications.
+While Go abstracts away most of the complexity through its simple APIs (`new(T)`, `&T{}` and `make`), understanding what happens under the hood gives us valuable insight into how the runtime achieves efficiency, and where potential bottlenecks may arise.
+
+In this post, we’ll explore Go’s memory allocator in depth.
+We’ll look at its core components, how they interact to serve allocations of different sizes, and how stacks are managed alongside heap objects.
+Along the way, we’ll examine some case studies to understand the practical implications of Go’s memory allocation strategies.
+By the end, you should have a clearer picture of how Go abstracts memory management while offers high performance.
+
 Before diving into how Go allocates memory, it's essential to understand some fundamental concepts about how memory works in a typical operating system.
-I suggest you read though the [Fundamental of Virtual Memory]() section first.
-If you are already familiar with those concepts, skip that section and jump directly to the next section.
+I suggest you read the [Fundamental of Virtual Memory](https://nghiant3223.github.io/2025/05/29/fundamental_of_virtual_memory.html) post first.
+If you are already familiar with those concepts, just skip that post.
+Now, let's dive into Go's view of virtual memory.
 
 ## Go's View of Virtual Memory
 
-As a Go process is simply a user-space application, it follows the standard virtual memory layout described in the previous section.
+As a Go process is simply a user-space application, it follows the standard virtual memory layout described in the fundamental [post](https://nghiant3223.github.io/2025/05/29/fundamental_of_virtual_memory.html).
 Specifically, the *Stack* segment of the process is the [`g0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L529-L529) stack (aka. system stack) associated with the main thread [`m0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L117-L117) of the Go runtime.
 Initialized (i.e. having non-zero value) global variables are stored in the *Data* segment, while uninitialized ones reside in the *BSS* segment.
 
-The traditional *Heap* segment, which is located under the program break, is not utilized by the Go runtime to allocate heap objects.
+The traditional *Heap* segment, which is located under the [program break](https://nghiant3223.github.io/2025/05/29/fundamental_of_virtual_memory.html#heap-allocation), is not utilized by the Go runtime to allocate heap objects.
 Instead, Go runtime relies heavily on [memory-mapped segments](https://nghiant3223.github.io/2025/05/29/fundamental_of_virtual_memory.html#memory-mapping) for allocating memory for heap objects and goroutine stacks.
 From now on, I'll refer to that memory-mapped segments Go uses for dynamic allocation as the *heap*, which not to be confused with the traditional process heap under the program break.
 
@@ -37,10 +72,11 @@ From now on, I'll refer to that memory-mapped segments Go uses for dynamic alloc
 ### Arena and Page
 
 To manage this memory efficiently, Go runtime partitions these memory-mapped segments into hierarchical units, ranging from coarse-grained to fine-grained.
-The most coarse-grained units are known as an [*arenas*](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L245-L311), a fixed-size region of 64 MB. Arenas are not required to be contiguous due to the characteristic of [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call, which *may return a different address than requested*.
+The most coarse-grained units are known as an [*arenas*](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L245-L311), a fixed-size region of 64 MB.
+Arenas are not required to be contiguous due to the characteristic of [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call, which [*may return a different address than requested*](https://man7.org/linux/man-pages/man2/mmap.2.html#DESCRIPTION).
 
 Each arena is further subdivided into smaller fixed-size units called *pages*, each measuring 8 KB.
-It's important to note that these runtime-managed pages differ from the typical OS pages discussed in the previous section, which are commonly 4 KB in size.
+It's important to note that these runtime-managed pages differ from the typical OS pages discussed in the fundamental [post](https://nghiant3223.github.io/2025/05/29/fundamental_of_virtual_memory.html), which are commonly 4 KB in size.
 Each page holds multiple objects of *the same size* if the objects are smaller than 8 KB, or just a single object if the size is exactly 8 KB.
 Objects larger than 8 KB stretch over multiple pages.
 
@@ -106,7 +142,7 @@ These wastes in all size class objects together with the tail waste constitutes 
 
 Let's consider a span of size class 55 in the worst-case scenario, where it holds three user objects, each with a size of 10241 bytes.
 The waste of 3 size class objects is `3*(10880-(10240+1))=3*639=1917` bytes (10240 is the size of the size class 54), and the tail waste is `4*8192-10880*3=128` bytes.
-Therefore, the total waste of this span is `1917+128=2045` bytes, while the span size is `4*8192=32768` bytes, resulting in the maximum total waste of `2045/32768=6.23%`, as described in the 6th column of the size class 55 in Go's size class [table](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L54).
+Therefore, the total waste of this span is `1917+128=2045` bytes, while the span size is `4*8192=32768` bytes, resulting in the maximum total waste of `2045/32768=6.24%`, as described in the 6th column of the [size class 55](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L61) in Go's size class table.
 
 Despite the fact that Go uses segregated fit strategy, which is designed to minimize fragmentation, there is still some waste in the memory.
 The total waste of a span reflects how much memory is externally fragmented per span.
@@ -133,7 +169,7 @@ Whether the span belongs to scan or noscan class is determined by the parity of 
 ### Span Set
 
 In order to manage spans efficiently, Go runtime organizes them into a data structure called [*span set*](https://github.com/golang/go/blob/go1.24.0/src/runtime/mspanset.go#L14-L52).
-A span set is a collection of [`mspan`]() objects that belong to the same span class, illustrated in the figure below.
+A span set is a collection of [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) objects that belong to the same span class, illustrated in the figure below.
 
 | <img src="/assets/2025-06-03-memory_allocation_in_go/span_set.png" width=500> |
 |:-----------------------------------------------------------------------------:|
@@ -181,10 +217,7 @@ The garbage collector uses this data to precisely and efficiently locate only th
 Go builds its own heap abstraction on top of memory-mapped segments, managed by the global [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241) object.
 [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241) is responsible for allocating new spans, sweeping unused spans, and even managing goroutine stacks.
 
-Since this blog focuses on allocation, we take a look at how [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241) allocates memory for spans and objects.
-Goroutine stack management will be discussed later in [Thread Stack and Goroutine Stack](#thread-stack-vs-goroutine-stack) section.
-
-### Span Allocation
+### Span Allocation: [`mheap.alloc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L953-L973)
 
 Since the Go runtime operates within a vast virtual address space, the [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241) allocator can struggle to locate contiguous free pages efficiently when it comes to allocating a span, especially under high concurrency.
 In early versions of Go, as detailed in the [Scaling the Go Page Allocator](https://go.googlesource.com/proposal/+/refs/changes/57/202857/2/design/35112-scaling-the-page-allocator.md) proposal, every [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241) operation was globally synchronized.
@@ -195,7 +228,7 @@ Let's dive into how it overcomes these bottlenecks and manages memory allocation
 #### Tracking Free Pages
 
 Because the virtual address space is large, and each page’s state (free or in-use) is a binary property, it is efficient to store this information in a bitmap where `1` represents in-use and `0` represents free.
-Note that in-use or free in this context refers to whether the page is handed to [`mcentral`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L20-L45) or not, not whether it is in-use or free by the user Go application.
+Note that in-use or free in this context refers to whether the page is handed to [`mcentral`](#central-span-manager-mcentral) or not, not whether it is in-use or free by the user Go application.
 Each bitmap is an array of 8 `uint64` values, taking 64 bytes in total, and can represent the state of 512 contiguous pages.
 
 Given that an arena is 64 MB in size and each page is 8 KB, there are `64MB/8KB=8192` pages in an arena.
@@ -300,7 +333,7 @@ This new memory section is also tracked as [in-use](https://github.com/golang/go
 
 Once the requested run of pages is found, the runtime sets up an [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) object to manage that memory range.
 Like any other Go object, an [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) object itself must live in memory.
-Thus, these [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) objects are allocated by a [slab](https://en.wikipedia.org/wiki/Slab_allocation) allocator [`fixalloc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mfixalloc.go#L16-L42), which requests memory directly from the kernel using [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call.
+Thus, these [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) objects are allocated by a [`fixalloc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mfixalloc.go#L16-L42) [slab](https://en.wikipedia.org/wiki/Slab_allocation) allocator, which requests memory directly from the kernel using [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call.
 
 The span is then set up with its size class, the number of pages it covers, and the address of its first page.
 The associated memory section transitions from *Prepared* to *Ready*, indicating that it's ready for [`mcentral`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L20-L45) to use.
@@ -391,7 +424,7 @@ When free pages are found in a [`pageCache`](https://github.com/golang/go/blob/g
 If so, it can be reused immediately without any global lock contention.
 Otherwise, the runtime allocates multiple [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) objects from [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241), caches them in the `P`’s free list for future use, and assigns one of them to manage the newly allocated run of pages.
 
-### Central Span Manager
+### Central Span Manager: [`mcentral`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L20-L45)
 
 Since [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241) primarily manages coarse-grained units of memory such as pages and large spans, it does not provide an efficient way to allocate and free tiny or small objects.
 That role is handled by [`mcentral`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L20-L45), which also serves as the bridge between [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241) and per-P allocators [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) (discussed in [Process's Memory Allocator](#processors-memory-allocator)).
@@ -437,12 +470,12 @@ A span transition between the partial and full is determined during allocation o
 If the number of free objects in a span reaches zero, it is moved from the partial set to the full set.
 Otherwise, if the number of free objects in a span is positive, it is moved from the full to the partial set.
 
-Since span sets are thread-safe as discussed in [Span Set](#span-set), an [`mcentral`]() can be accessed concurrently by multiple goroutines without additional locking.
+Since span sets are thread-safe as discussed in [Span Set](#span-set), an [`mcentral`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L20-L45) can be accessed concurrently by multiple goroutines without additional locking.
 Thus increases the throughput of span allocation of Go programs.
 
 #### Preparing a Span: [`mcentral.cacheSpan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L80-L198)
 
-As the intermediate between [`mheap`]() and [`mcache`](), an [`mcentral`]() is responsible for preparing span—either existing its span sets or requested from [`mheap`]()—to the requesting [`mcache`]().
+As the intermediate between [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241) and [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55), an [`mcentral`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L20-L45) is responsible for preparing span—either existing its span sets or requested from [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241)—to the requesting [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55).
 To illustrate, this logic is detailed in the following flowchart.
 Logic of the <span style="color:green">green</span> box *Request mheap to allocate a span* was described in [Span Allocation](#span-allocation).
 
@@ -487,20 +520,20 @@ Z --> 1(((End)))
 
 #### Collecting a Span: [`mcentral.uncacheSpan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L200-L247)
 
-When a [`mcache`]() needs to return a span back to a [`mcentral`](), it invokes [`mcentral.uncacheSpan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L200-L247) method.
+When a [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) needs to return a span back to a [`mcentral`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L20-L45), it invokes [`mcentral.uncacheSpan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L200-L247) method.
 If a span hasn't been swept, it is swept first to reclaim unreachable objects.
-Then regardless of whether sweeping was needed, the span is placed into the appropriate swept set—either full or partial depends on the number of free objects it contains.
+Then regardless of whether sweeping was needed, the span is placed into either full or partial swept set, depending on its number of free objects.
 
-### Processor's Memory Allocator
+### Processor's Memory Allocator: [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55)
 
 As discussed in the [Go Scheduler](https://nghiant3223.github.io/2025/04/15/go-scheduler.html) post, each processor `P` serves as the execution context for goroutines.
-As goroutine may allocate memory, each `P` also maintains its own memory allocator called [`mcache`](), which is optimized for tiny and small heap allocation, and allocating stack segment for goroutines as well.
+As goroutine may allocate memory, each `P` also maintains its own memory allocator called [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55), which is optimized for tiny and small heap allocation, and allocating stack segment for goroutines as well.
 
 #### Caching Free Spans
 
-The name [`mcache`]() comes from the fact that it caches spans with free objects for each span class in its [`alloc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mcache.go#L46-L46) field.
+The name [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) comes from the fact that it caches spans with free objects for each span class in its [`alloc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L46-L46) field.
 When an [`mcache` instance is initialized](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L86-L99), every span class is cached with an [`emptymspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L83-L84), which contains no free objects.
-When a goroutine needs to allocate a user object of a specific span class, it asks [`mcache`]() for a free size class object to house the requested user object—either from the cached span, or by requesting a new span from [`mcentral`]() if no free object is available in the cached span.
+When a goroutine needs to allocate a user object of a specific span class, it asks [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) for a free size class object to house the requested user object—either from the cached span, or by requesting a new span from [`mcentral`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L20-L45) if no free object is available in the cached span.
 This logic is illustrated in the following diagram.
 
 <table>
@@ -542,8 +575,8 @@ While logic for the <span style="color:blue">blue</span> box *Request `mcentral`
 
 #### Tiny Objects Allocator
 
-All user tiny objects of various sizes (smaller than 16 bytes) are allocated from a [span class 5](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mheap.go#L566-L566) (or [size class 2](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/sizeclasses.go#L8)), where each size class object occupies 16 bytes.
-Each [`mcache`]() instance tracks tiny allocations in a span using 3 fields:
+All user tiny objects of various sizes (smaller than 16 bytes) are allocated from a [span class 5](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L566-L566) (or [size class 2](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L8)), where each size class object occupies 16 bytes.
+Each [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) instance tracks tiny allocations in a span using 3 fields:
 1. [`tiny`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L40-L40): The starting address of the current size class object having available space for allocation.
 2. [`tinyoffset`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L41-L41): The end position (relative to  [`tiny`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L40-L40)) of the last allocated user object.
 3. [`tinyalloc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L42-L42): Total number of user tiny objects allocated in the current span so far.
@@ -555,9 +588,15 @@ Each [`mcache`]() instance tracks tiny allocations in a span using 3 fields:
 The figure above illustrates a span used for tiny object allocations, in which `0x30` is an example starting address of the size class object.
 The detailed allocation logic will be explained in the [Tiny Objects: `mallocgcTiny`](#tiny-objects-mallocgctiny).
 
-### Putting it All Together
+#### Putting it All Together
 
-TODO: add figure for overview of memory allocation in Go.
+As discussed in previous sections, Go's memory allocator is a complex system with three components that work together to manage memory efficiently: `mheap`, `mcentral`, and `mcache`.
+The figure below summarizes how these components interact to allocate memory for our Go programs.
+Take a moment to review it before we dive into the detailed heap allocation logic in the next section.
+
+| <img id="tiny-span" src="/assets/2025-06-03-memory_allocation_in_go/memory_allocator_recap.png"> |
+|:------------------------------------------------------------------------------------------------:|
+|                                 Recap of memory allocator in Go                                  |
 
 ## Heap Allocation
 
@@ -568,7 +607,7 @@ Third, creating composite types such as slices, maps, or channels with `make` of
 
 The decision of allocating an object on heap is determined by the compiler, and will be described in [Stack or Heap?](#stack-or-heap) section.
 This section only focuses on [`mallocgc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L992-L1096)—the method Go runtime uses to allocates objects on the heap.
-This method will be indirectly invoked by various built-in functions and operators, such as `new`, `make`, `&T{}`, and compile-time determined heap allocation.
+This method will be indirectly invoked by various built-in functions and operators, such as `new`, `make`, `&T{}`.
 
 [`mallocgc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L992-L1096) classifies objects into three categories based on their size: tiny (less than 16 bytes), small (16 bytes to 32760 bytes), and large (greater than 32760 bytes).
 It also considers whether the object type contains any pointers, which affects garbage collection.
@@ -609,9 +648,9 @@ J --> Z
     </tbody>
 </table>
 
-### Tiny Objects: [`mallocgcTiny`]()
+### Tiny Objects: [`mallocgcTiny`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1098-L1252)
 
-Tiny objects are allocated by an [`mcache`]() in every processor `P`, using the three properties described in [Tiny Objects Allocator](#tiny-objects-allocator) section.
+Tiny objects are allocated by an [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) in every processor `P`, using the three properties described in [Tiny Objects Allocator](#tiny-objects-allocator) section.
 The allocation logic is described in the following diagram.
 
 <table>
@@ -647,7 +686,7 @@ M --> Z(((End)))
     <tbody>
         <tr>
             <td style="text-align: center">
-                Overview logic for <a href="https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1098-L1252"><code>mallocgcTiny</code></a>
+                Overview logic for <a href="https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1098-L1252"><code>mallocgcTiny</code></a>
             </td>
         </tr>
     </tbody>
@@ -662,50 +701,50 @@ The logic of the <span style="color:green">green</span> box *Request a new span 
 |:-----------------------------------------------------------------------------------------:|
 |                                Allocation for tiny objects                                |
 
-Note that tiny object allocations are served by [`mcache`](), which is local to each processor `P`.
-This makes the allocation thread-safe and lock-free, except when a new span must be requested from [`mheap`]() by [`mcentral`]().
+Note that tiny object allocations are served by [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55), which is local to each processor `P`.
+This makes the allocation thread-safe and lock-free, except when a new span must be requested from [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241) by [`mcentral`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L20-L45).
 
 Spans used by tiny object allocations belong to span class 5, or size class 2.
-According to the [size class table](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/sizeclasses.go#L6-L73), a span of size class 2 accommodates 512 size class objects.
+According to the [size class table](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L6-L73), a span of size class 2 accommodates 512 size class objects.
 Since each size class object can house multiple user objects in tiny allocation, a single span can serve at least 512 tiny user object allocations without any locks.
 
-### Small Objects: [mallocgcSmall*](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1254-L1522)
+### Small Objects: [mallocgcSmall*](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1254-L1522)
 
 In order for the garbage collector to efficiently identify live objects and skip tracing for objects which don't contain references to other objects, Go classifies small objects into *scan* and *noscan* span class based on whether their types contain pointers (described in [Span Class](#span-class) section).
 The *scan* span class is further divided into two categories: those with a heap bits and those with malloc header (described in [Heap Bits and Malloc Header](#heap-bits-and-malloc-header) section).
 Go implements different functions to allocate small objects based on these classifications.
 
-#### *Noscan* Small Objects: [`mallocgcSmallNoscan`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1254-L1338) 
+#### *Noscan* Small Objects: [`mallocgcSmallNoscan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1254-L1338) 
 
-Small objects that contain no pointers are allocated by [`mallocgcSmallNoscan`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1254-L1338) function.
+Small objects that contain no pointers are allocated by [`mallocgcSmallNoscan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1254-L1338) function.
 The requested `size` is first rounded up so the object fits exactly into a size class object.
 As the allocation is *noscan*, the span class is calculated as `2*sizeclass+1`.
-For example, if a user requests an object of size 365 bytes, it is rounded up to the nearest size class of 384 bytes, or [size class 22](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/sizeclasses.go#L28).
+For example, if a user requests an object of size 365 bytes, it is rounded up to the nearest size class of 384 bytes, or [size class 22](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L28).
 The corresponding span class is therefore 45 (`2*22+1`).
 
-[`mallocgcSmallNoscan`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1254-L1338) then checks if there is a free object in the cached span of the calculated span class in the current processor `P`'s [`mcache`]().
-If none is available, it requests a free size class object by asking for a new span from [`mcentral`]() and caches it in the [`mcache`]().
+The function then checks if there is a free object in the cached span of the calculated span class in the current processor `P`'s [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55).
+If none is available, it requests a free size class object by asking for a new span from [`mcentral`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L20-L45) and caches it in the [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55).
 After getting a free size class object, it updates information for the garbage collector and the profiler, and returns the address of the allocated object.
 
-#### *Scan* Small Objects: [`mallocgcSmallScanNoHeader`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1340-L1429) and [`mallocgcSmallScanHeader`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1431-L1522)
+#### *Scan* Small Objects: [`mallocgcSmallScanNoHeader`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1340-L1429) and [`mallocgcSmallScanHeader`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1431-L1522)
 
-Depending on its size, small objects containing pointers are allocated by [`mallocgcSmallScanNoHeader`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1340-L1429) or [`mallocgcSmallScanHeader`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1431-L1522) function.
+Depending on its size, small objects containing pointers are allocated by [`mallocgcSmallScanNoHeader`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1340-L1429) or [`mallocgcSmallScanHeader`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1431-L1522) function.
 If the requested `size` is less than or equal to 512 bytes, allocation is handled by the former; otherwise, it is handled by the latter.
-The logic of these two functions is similar to that of [`mallocgcSmallNoscan`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1254-L1338), except for [span class](#span-class), layout of span, and layout of size class objects inside the span.
+The logic of these two functions is similar to that of [`mallocgcSmallNoscan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1254-L1338), except for [span class](#span-class), layout of span, and layout of size class objects inside the span.
 
-Spans used by [`mallocgcSmallScanNoHeader`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1340-L1429) is different from ones used by [`mallocgcSmallNoscan`]()—it contains a special data at its end called heap bits (see [Heap Bits and Malloc Header](#heap-bits-and-malloc-header)).
-Since these spans must reserve space to store heap bits, they can accommodate less size class objects than what specified in the [size class table](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/sizeclasses.go#L6-L73).
-The reservation logic is implemented in [`mheap.initSpan`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mheap.go#L1414-L1415) method.
+Spans used by [`mallocgcSmallScanNoHeader`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1340-L1429) is different from ones used by [`mallocgcSmallNoscan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1254-L1338)—it contains a special data at its end called heap bits (see [Heap Bits and Malloc Header](#heap-bits-and-malloc-header)).
+Since these spans must reserve space to store heap bits, they can accommodate less size class objects than what specified in the [size class table](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L6-L73).
+The reservation logic is implemented in [`mheap.initSpan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L1414-L1415) method.
 
-The layout of size class objects inside a span used by [`mallocgcSmallScanHeader`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1431-L1522) is special as well—each size class object has a malloc header (see [Heap Bits and Malloc Header](#heap-bits-and-malloc-header)) prepended to it.
+The layout of size class objects inside a span used by [`mallocgcSmallScanHeader`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1431-L1522) is special as well—each size class object has a malloc header (see [Heap Bits and Malloc Header](#heap-bits-and-malloc-header)) prepended to it.
 Therefore, in order for the user object and malloc header to fit exactly into a size class object, the requested `size` is increased by 8 bytes before rounding up to the nearest size class.
 For example, suppose Go code requests an object of 636 bytes that contains pointers.
-Although this would normally fit in [size class 28](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/sizeclasses.go#L34) (640 bytes), the fact that this object contains pointers requires a malloc header, increasing the size to 644 bytes.
-This pushes the allocation into [size class 29](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/sizeclasses.go#L35) (704 bytes).
+Although this would normally fit in [size class 28](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L34) (640 bytes), the fact that this object contains pointers requires a malloc header, increasing the size to 644 bytes.
+This pushes the allocation into [size class 29](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L35) (704 bytes).
 
-### Large Objects: [mallocgcLarge](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1524-L1612)
+### Large Objects: [mallocgcLarge](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1524-L1612)
 
-Since [`mcache`]() and [`mcentral`]() only manages spans of size class up to 32KB, large objects (greater than 32760 bytes) are allocated directly from [`mheap`]() (see [Span Allocation](#span-allocation)) without consulting [`mcache`]() or [`mcentral`]().
+Since [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) and [`mcentral`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L20-L45) only manages spans of size class up to 32KB, large objects (greater than 32760 bytes) are allocated directly from [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241) (see [Span Allocation](#span-allocation)) without consulting [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55) or [`mcentral`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcentral.go#L20-L45).
 Spans accommodating large objects can be also either *scan* or *noscan*.
 Unlike small objects, large objects do not vary by span class: *scan* spans are always 0, and *noscan* spans are always 1.
 
@@ -720,10 +759,10 @@ Each thread has its own stack—a contiguous block of memory that holds stack fr
 Since allocating variables on the stack is simply adjusting the stack pointer (as explained in [Stack Allocation](https://nghiant3223.github.io/2025/05/29/fundamental_of_virtual_memory.html#stack-allocation)), our focus is on how stacks are allocated and managed in Go.
 
 In Go, a thread's stack is called the *system stack*, while a goroutine's stack is simply called the *stack*.
-To manage execution contexts, the runtime introduces the [`m`]() (thread) and [`g`]() (goroutine) abstractions.
-Every [`g`]() has a [`stack`]() field recording the start and end addresses of its stack.
-Each [`m`]() has a special [`g0`]() goroutine, whose stack represents the system stack.
-The runtime uses [`g0`]() when performing operations that must run on the system stack rather than a goroutine stack, such as growing or shrinking a goroutine's stack.
+To manage execution contexts, the runtime introduces the [`m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L528-L630) (thread) and [`g`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L396-L508) (goroutine) abstractions.
+Every [`g`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L396-L508) has a [`stack`]() field recording the start and end addresses of its stack.
+Each [`m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L528-L630) has a special [`g0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L529-L529) goroutine, whose stack represents the system stack.
+The runtime uses [`g0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L529-L529) when performing operations that must run on the system stack rather than a goroutine stack, such as growing or shrinking a goroutine's stack.
 
 The system stack of the main thread is allocated by the kernel when a Go process starts.
 For non-main threads, their stack are allocated by either the kernel or the Go runtime, depending on the operating system and whether [CGO](https://go.dev/wiki/cgo) is used.
@@ -736,30 +775,30 @@ On Linux, however, the Go runtime allocates a system stack for non-main threads 
 
 A system stack allocated by the kernel resides outside Go's managed virtual memory space, while a system stack allocated by the runtime is created inside it.
 The kernel ensures that its system stacks do not collide with Go's managed memory.
-Kernel-allocated system stacks typically range from 512 KB to several MB, whereas system stacks allocated by Go are fixed at [16 KB](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L2242-L2242).
-By contrast, goroutine stacks start with [2 KB](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L5044-L5044) and can grow or shrink dynamically as needed.
+Kernel-allocated system stacks typically range from 512 KB to several MB, whereas system stacks allocated by Go are fixed at [16 KB](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L2242-L2242).
+By contrast, goroutine stacks start with [2 KB](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L5044-L5044) and can grow or shrink dynamically as needed.
 
-### Allocating Stack: [`stackalloc`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L330-L438)
+### Allocating Stack: [`stackalloc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/stack.go#L330-L438)
 
 Stacks managed by the Go runtime—whether system stacks or goroutine stacks—are accommodated in [spans](#span-and-size-class), just like heap objects.
 You can think of a stack as a special kind of heap object dedicated to holding local variables and function call frames during execution of Go runtime or user code.
 
-Stacks are normally allocated from the current `P`’s [`mcache`]().
+Stacks are normally allocated from the current `P`’s [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55).
 If garbage collection is in progress, when the number of processors `P` changes, or if the current thread is detached from its `P` during a system call, stacks are instead allocated from the global pools.
-There are two pools: [*small*](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L144-L153) for stack smaller than 32 KB, or [*large*](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L161-L165) pool for stacks equal to or bigger than 32 KB.
+There are two pools: [*small*](https://github.com/golang/go/blob/go1.24.0/src/runtime/stack.go#L144-L153) for stack smaller than 32 KB, or [*large*](https://github.com/golang/go/blob/go1.24.0/src/runtime/stack.go#L161-L165) pool for stacks equal to or bigger than 32 KB.
 
 Goroutines starts wit small stack thus allocated by the small stack pool, but when it grows beyond 32 KB due to calling more functions or allocating more stack variables, the large stack pool is used instead.
-This behavior will be described in [Stack Growth](#stack-growth) section.
+This behavior will be described in [Stack Growth](#stack-growth-morestack) section.
 
 #### Allocating Stack from Pool
 
-The small stack pool is a four-entry array of doubly linked lists of [`mspan`](), each span holding metadata for a block of virtual memory.
+The small stack pool is a four-entry array of doubly linked lists of [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496), each span holding metadata for a block of virtual memory.
 All spans in this pool belong to span class 0 and cover four contiguous pages, hence each span takes up 32 KB. 
 Each entry in the array corresponds to a stack order, which determines stack size: order 0 → every stack is 2 KB, order 1 → every stack is 4 KB, order 2 → every stack is 8 KB, and order 3 → every stack is 16 KB.
 
 You might wonder why stacks are categorized into orders and sizes this way.
 The reason is that goroutine stacks are contiguous memory regions that double in size when they grow.
-This behavior will be explained in more detail in the [Stack Growth](#stack-growth) section.
+This behavior will be explained in more detail in the [Stack Growth](#stack-growth-morestack) section.
 
 | <img id="tiny-span" src="/assets/2025-06-03-memory_allocation_in_go/small_stack_pool.png" width=500> |
 |:----------------------------------------------------------------------------------------------------:|
@@ -767,26 +806,26 @@ This behavior will be explained in more detail in the [Stack Growth](#stack-grow
 
 When a stack smaller than 32 KB is requested, the runtime first determines the appropriate order based on the requested size.
 It then checks the head of the linked list for that order to find an available span.
-If no span is available, it requests one from [`mheap`]() (see [Span Allocation](#span-allocation)) and splits it into stacks of the required order.
+If no span is available, it requests one from [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241) (see [Span Allocation](#span-allocation)) and splits it into stacks of the required order.
 Once a span is ready, Go runtime takes the first available stack, updates the span's metadata, and returns the stack.
 
-Large stack pool is as simple as a linked list of stack of various sizes, each stack contained within an [`mspan`]() of span class 0.
+Large stack pool is as simple as a linked list of stack of various sizes, each stack contained within an [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L402-L496) of span class 0.
 When a stack equal to or larger than 32 KB is requested, the first stack is popped from the linked list and returned.
-If the list is empty, it requests a new span from [`mheap`]() (see [Span Allocation](#span-allocation)).
+If the list is empty, it requests a new span from [`mheap`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L55-L241) (see [Span Allocation](#span-allocation)).
 
 Note that since stack pools are global, and can be accessed by multiple threads concurrently
 Therefore, they are protected by a mutex lock to ensure thread safety with the trade-off of lower throughput due to lock contention.
 
 #### Allocating Stack from Cache
 
-In order to reduce lock contention when allocating stack, each processor `P` maintains its owns stack cache in its [`mcache`]().
+In order to reduce lock contention when allocating stack, each processor `P` maintains its owns stack cache in its [`mcache`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mcache.go#L13-L55).
 Similar to small stack pool, the stack cache is a four-entry array of singly linked lists of free stacks, each entry corresponding to a stack order.
 
 When serving a small stack allocation request, the runtime first checks the stack cache of the current `P` for an available stack.
 If none is available, it refills the cache by requests some stacks from the small stack pool, caches them, and return the first one.
 Large stacks aren't served from the stack cache, they are always allocated from the large stack pool directly.
 
-### Stack Growth
+### Stack Growth:  [`morestack`](https://github.com/golang/go/blob/go1.24.0/src/runtime/asm_arm64.s#L294-L346)
 
 #### Segmented Stack
 
@@ -844,12 +883,12 @@ If goroutine stacks were never shrunk, however, memory can be wasted if it grows
 In fact, with contiguous stack scheme, a goroutine stack is shrunk during a garbage collector cycle rather than when a function returns.
 If the total in-used stack size is less than a quarter of the current stack size, a new smaller stack half the size of the current one is allocated.
 Content of the current stack is copied to the new stack, and the goroutine switches to use the new stack.
-See [`shrinkstack`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L1179-L1238) for more details.
+See [`shrinkstack`](https://github.com/golang/go/blob/go1.24.0/src/runtime/stack.go#L1179-L1238) for more details.
 
 As mentioned in the [Go Scheduler](https://nghiant3223.github.io/2025/04/15/go-scheduler.html#cooperative-preemption-since-go-114) post, in order for goroutine stack to grow, some checks must be inserted at function prologues.
 The check is basically CPU instruction and costs CPU cycles to execute.
 For small functions that are called frequently, this overhead can be significant.
-To mitigate this overhead, small functions are marked with `//go:nosplit` directive, which tells the [compiler not to insert stack growth checks in their prologues](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/cmd/internal/obj/x86/obj6.go#L679-L681).
+To mitigate this overhead, small functions are marked with `//go:nosplit` directive, which tells the [compiler not to insert stack growth checks in their prologues](https://github.com/golang/go/blob/go1.24.0/src/cmd/internal/obj/x86/obj6.go#L679-L681).
 
 > ⚠️ Don't be confused.
 > *Split* in `//go:nosplit` sounds relate to stack split in segmented stack approach, but it actually means stack growth check in contiguous stack approach as well.
@@ -857,9 +896,9 @@ To mitigate this overhead, small functions are marked with `//go:nosplit` direct
 #### Stack Guard
 
 When a function is called, the stack pointer is decreased by the size of the function’s stack frame.
-It is then checked against the goroutine's [*stack guard*](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/runtime2.go#L405-L405), which determines whether stack growth is required.
-The stack guard consists of two parts: [`StackNosplitBase`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L8-L14) and [`StackSmall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L19-L25).
-On Linux, this places the guard at 928 bytes above the stack bottom—800 bytes for [`StackNosplitBase`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L8-L14) and 128 bytes for [`StackSmall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L19-L26).
+It is then checked against the goroutine's [*stack guard*](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L405-L405), which determines whether stack growth is required.
+The stack guard consists of two parts: [`StackNosplitBase`](https://github.com/golang/go/blob/go1.24.0/src/internal/abi/stack.go#L8-L14) and [`StackSmall`](https://github.com/golang/go/blob/go1.24.0/src/internal/abi/stack.go#L19-L25).
+On Linux, this places the guard at 928 bytes above the stack bottom—800 bytes for [`StackNosplitBase`](https://github.com/golang/go/blob/go1.24.0/src/internal/abi/stack.go#L8-L14) and 128 bytes for [`StackSmall`](https://github.com/golang/go/blob/go1.24.0/src/internal/abi/stack.go#L19-L26).
 
 | <img src="/assets/2025-06-03-memory_allocation_in_go/stack_guard.png" width=500> |
 |:--------------------------------------------------------------------------------:|
@@ -867,24 +906,24 @@ On Linux, this places the guard at 928 bytes above the stack bottom—800 bytes 
 
 
 But overflow means that stack pointer goes beyond the stack, so why is stack pointer checked against stack guard rather than the bottom of the stack?
-The reasons are explained in this [comment](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L17-L66) in the Go runtime source code.
+The reasons are explained in this [comment](https://github.com/golang/go/blob/go1.24.0/src/runtime/stack.go#L17-L66) in the Go runtime source code.
 Let me reexplain them in simpler terms.
 
-First, since Go allows functions not to perform stack grow checks by marking them with `//go:nosplit`, space equal to [`StackNosplitBase`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L8-L14) must be reserved so that they can execute safely without referencing any invalid address.
-For example, [`morestack`]()—which itself handles stack growth—must have its entire stack frame fit within the allocated stack.
+First, since Go allows functions not to perform stack grow checks by marking them with `//go:nosplit`, space equal to [`StackNosplitBase`](https://github.com/golang/go/blob/go1.24.0/src/internal/abi/stack.go#L8-L14) must be reserved so that they can execute safely without referencing any invalid address.
+For example, [`morestack`](https://github.com/golang/go/blob/go1.24.0/src/runtime/asm_arm64.s#L294-L346)—which itself handles stack growth—must have its entire stack frame fit within the allocated stack.
 
-Second, it serves as an optimization for small functions having stack frame smaller than [`StackSmall`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L19-L26).
+Second, it serves as an optimization for small functions having stack frame smaller than [`StackSmall`](https://github.com/golang/go/blob/go1.24.0/src/internal/abi/stack.go#L19-L26).
 When these functions are called, Go doesn't bother decreasing the stack pointer and checking it against the stack guard.
 Instead, it simply checks whether the current stack pointer is below the stack guard, saving one CPU instruction per function call by skipping the stack pointer adjustment.
 
-### Reusing Stack
+### Reusing Stack: [`stackfree`](https://github.com/golang/go/blob/go1.24.0/src/runtime/stack.go#L440-L525)
 
 When goroutine finishes its execution, goroutine stack is shrunk due to having too much available space, or system thread managed by Go runtime exits, their stacks are marked as reusable.
 If the goroutine is currently attached with a processor `P` and the size of `P`'s stack cache is small enough, its stack is returned to the stack cache of that `P`.
 Otherwise, the stack is returned to the global pool—either small stack pool with the corresponding order or large stack pool, depending on the size of the stack.
 
 When stack is returned to the global pool, the corresponding page of memory will be returned to kernel if garbage collection is not in progress.
-Check this [comment](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L245-L259) in the Go runtime source code for more details.
+Check this [comment](https://github.com/golang/go/blob/go1.24.0/src/runtime/stack.go#L245-L259) in the Go runtime source code for more details.
 
 ## Stack or Heap?
 
@@ -917,14 +956,14 @@ When `getUserByID` is called, the `user` variable is placed at address `0xe0` in
 After the function returns, `user` still holds the address `0xe0`, but that address is no longer valid because the stack frame of `getUserByID` has been popped.
 When `main` then tries to access `user.age`, it dereferences an invalid address, leading to a [dangling pointer](https://en.wikipedia.org/wiki/Dangling_pointer) problem and undefined behavior.
 
-To prevent such issues, Go employs a technique called [escape analysis](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/cmd/compile/internal/escape/escape.go#L1-L1), which happens during compile time.
+To prevent such issues, Go employs a technique called [escape analysis](https://github.com/golang/go/blob/go1.24.0/src/cmd/compile/internal/escape/escape.go#L1-L1), which happens during compile time.
 Escape analysis determines whether a variable—declared with `var n T`, `new(T)`, `&T{}`, or `make(T)`—could be safely allocated on goroutine stack or must *escape* to the heap.
 If a variable is recognized to be referenced outside its declaring function, it is allocated on the heap to ensure it can be safely accessed after the function returns.
 
 In the above code snippet, the `user` variable is determined to escape to the heap because its address is returned and used in `main`.
 Therefore, the compiler allocates `user` on the heap to prevent dangling pointer issues.
 
-Escape analysis also <u>attempts to keep variables on the stack, even if they would normally be heap-allocated</u> (e.g., those created with `new(T)`, `&T{}`, or `make(T)` keywords), as long as they are proven to be used only within the function scope and do not take more memory space than [`MaxImplicitStackVarSize`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/cmd/compile/internal/ir/cfg.go#L13-L19)  at compile time.
+Escape analysis also <u>attempts to keep variables on the stack, even if they would normally be heap-allocated</u> (e.g., those created with `new(T)`, `&T{}`, or `make(T)` keywords), as long as they are proven to be used only within the function scope and do not take more memory space than [`MaxImplicitStackVarSize`](https://github.com/golang/go/blob/go1.24.0/src/cmd/compile/internal/ir/cfg.go#L13-L19)  at compile time.
 
 You can verify these behaviors by compiling the following program with the `-gcflags="-m"` option, which instructs the compiler to print optimization decisions, including escape analysis results.
 
@@ -948,10 +987,10 @@ func main() {
 // ./main.go:12:10: make([]User, 100) does not escape
 ```
 
-We can see that `user` is moved to the heap because it escapes, while the slice created by `make([]User, 100)` doesn't escape because it's used only in `main` and its size is less than [`MaxImplicitStackVarSize`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/cmd/compile/internal/ir/cfg.go#L13-L19).
+We can see that `user` is moved to the heap because it escapes, while the slice created by `make([]User, 100)` doesn't escape because it's used only in `main` and its size is less than [`MaxImplicitStackVarSize`](https://github.com/golang/go/blob/go1.24.0/src/cmd/compile/internal/ir/cfg.go#L13-L19).
 
-Now, try updating the length of the slice to 1000000 and compile the program again with the same option and observe the output below.
-`user` still escapes to the heap, but this time the slice created with `make([]User, 1000000)` also escapes because its size exceeds [`MaxImplicitStackVarSize`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/cmd/compile/internal/ir/cfg.go#L13-L19), thus too large to fit on stack.
+Now, try updating the length of the slice to 1,000,000 and compile the program again with the same option and observe the output below.
+`user` still escapes to the heap, but this time the slice created with `make([]User, 1000000)` also escapes because its size exceeds [`MaxImplicitStackVarSize`](https://github.com/golang/go/blob/go1.24.0/src/cmd/compile/internal/ir/cfg.go#L13-L19), thus too large to fit on stack.
 
 ```go
 // $ go build -gcflags="-m" main.go
@@ -967,12 +1006,12 @@ let's examine some real-world examples to understand how Go allocates memory in 
 ### Case Study 1: Reusing Underlying Array of Slice
 
 As you may know that a slice in Go is a descriptor containing a pointer to an underlying array, its length, and its capacity.
-When we create a new slice with `make([]T, length, capacity)`, the compiler overwrites the `make` keyword with a call to [`makeslice`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/slice.go#L92-L117) in the Go runtime.
-[`makeslice`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/slice.go#L92-L117) then calls [`mallocgc`](#heap-allocation) with the size equal to `capacity*sizeof(T)` to allocate the underlying array on the heap.
+When we create a new slice with `make([]T, length, capacity)`, the compiler overwrites the `make` keyword with a call to [`makeslice`](https://github.com/golang/go/blob/go1.24.0/src/runtime/slice.go#L92-L117) in the Go runtime.
+[`makeslice`](https://github.com/golang/go/blob/go1.24.0/src/runtime/slice.go#L92-L117) then calls [`mallocgc`](#heap-allocation) with the size equal to `capacity*sizeof(T)` to allocate the underlying array on the heap.
 In other words, `capacity` tracks the size of the underlying array, while `length` tracks the number of in-use elements in the array.
 
 `append` appends new elements to the end of the slice, increasing its length.
-If the new length exceeds the current capacity, `append` calls [`mallocgc`]() to allocate a new underlying array twice as big, copies the existing elements to the new array, and updates the slice descriptor to point to the new array.
+If the new length exceeds the current capacity, `append` calls [`mallocgc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L992-L1096) to allocate a new underlying array twice as big, copies the existing elements to the new array, and updates the slice descriptor to point to the new array.
 
 A slice in Go can be resliced using the `[start:end]` syntax.
 Reslicing creates a new slice header that points to a subrange of elements within the same underlying array as the original slice.
@@ -1022,7 +1061,7 @@ func main() {
 
 Since `parse` creates an empty slice for each line, it allocates a new underlying array on the heap every time it is called.
 Plus, since `append` is called for each field in the line, it may trigger multiple heap allocations if the number of fields exceeds the initial capacity of the underlying array.
-The same path in [`mallocgc`]() is executed repeatedly, leading to many wasteful heap allocations.
+The same path in [`mallocgc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L992-L1096) is executed repeatedly, leading to many wasteful heap allocations.
 
 Let's optimize the program by reusing the underlying array of the `row` slice.
 By reslicing with `row[:0]`, we reset the length of the slice to zero while keeping its capacity unchanged.
@@ -1041,7 +1080,7 @@ func parse(line string, row []string) []string {
   start := 0
   for i := 0; i < len(line); i++ {
     if line[i] == ',' {
-    row = append(row, line[start:i])
+      row = append(row, line[start:i])
       start = i + 1
     }
   }
@@ -1070,21 +1109,21 @@ func main() {
 
 ### Case Study 2: Grouping Multiple Variables into a Single Struct 
 
-Recently, there was a [commit](https://github.com/golang/go/commit/ba7b8ca336123017e43a2ab3310fd4a82122ef9d) in the [`iter`](https://github.com/golang/go/tree/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/iter) package that grouped multiple scalar variables into a single struct.
+Recently, there was a [commit](https://github.com/golang/go/commit/ba7b8ca336123017e43a2ab3310fd4a82122ef9d) in the [`iter`](https://github.com/golang/go/tree/go1.24.0/src/iter) package that grouped multiple scalar variables into a single struct.
 
 | <img src="/assets/2025-06-03-memory_allocation_in_go/grouping_variables_into_a_struct.png" width=800> |
 |:-----------------------------------------------------------------------------------------------------:|
 |                           Grouping multiple variables into a single struct                            |
 
-Originally, since these 7 variables outlive the function scope, all of them are allocated on the heap separately, thus results in 7 calls to [`mallocgc`]().
-Although some of these variables are smaller than 16 bytes and can be allocated by the [Tiny Objects Allocator](#tiny-objects-allocator), the overhead of 7 calls to [`mallocgc`]() is still significant if `Pull` is called frequently.
+Originally, since these 7 variables outlive the function scope, all of them are allocated on the heap separately, thus results in 7 calls to [`mallocgc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L992-L1096).
+Although some of these variables are smaller than 16 bytes and can be allocated by the [Tiny Objects Allocator](#tiny-objects-allocator), the overhead of 7 calls to [`mallocgc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L992-L1096) is still significant if `Pull` is called frequently.
 
-By grouping these variables into a single struct, only one call to [`mallocgc`]() is needed to allocate the struct on the heap, improving memory allocation efficiency.
+By grouping these variables into a single struct, only one call to [`mallocgc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L992-L1096) is needed to allocate the struct on the heap, improving memory allocation efficiency.
 This approaches has a downside, however, that it couples unrelated objects together, which prevents the garbage collector from reclaiming individual objects that are no longer needed.
 However, in this specific case, since most of these variables are used together, the trade-off is acceptable.
 
 The benchmark results in the original PR (copied below) show that the number of heap allocations is reduced from 11 to 5.
-The difference matches the above analysis, where 7 variables are grouped into a single struct, thus saving 6 calls to [`mallocgc`]().
+The difference matches the above analysis, where 7 variables are grouped into a single struct, thus saving 6 calls to [`mallocgc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L992-L1096).
 Also, the memory consumption and allocation time are reduced by around one-third.
 
 ```
@@ -1104,26 +1143,41 @@ Pull-12       11.000 ± 0%   5.000 ± 0%  -54.55% (p=0.000 n=10)
 ### Case Study 3: Reusing Objects with [`sync.Pool`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L14-L64)
 
 In some applications, many short-lived, stateless objects of the same type are created and discarded frequently.
-A typical example is the [`pp`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/fmt/print.go#L119-L144) printer object, which is used extensively throughout the [`fmt`](https://github.com/golang/go/tree/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/fmt) package to format strings in commonly used functions, such as [`Fprintf`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/fmt/print.go#L220-L228) and [`Sprintf`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/fmt/print.go#L236-L243).
-These functions allocate a new [`pp`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/fmt/print.go#L119-L144) object, uses it to perform formatting, and then throws it away.
-If your application writes 10,000 logs per second, translating into 10,000 [`pp`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/fmt/print.go#L119-L144) objects being allocated and later scanned by the garbage collector every second.
+A typical example is the [`pp`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L119-L144) printer object, which is used extensively throughout the [`fmt`](https://github.com/golang/go/tree/go1.24.0/src/fmt) package to format strings in commonly used functions, such as [`Fprintf`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L220-L228) and [`Sprintf`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L236-L243).
+These functions allocate a new [`pp`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L119-L144) object, uses it to perform formatting, and then throws it away.
+If your application writes 10,000 logs per second, translating into 10,000 [`pp`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L119-L144) objects being allocated and later scanned by the garbage collector every second.
 This pattern leads to significant overhead due to frequent heap allocations and garbage collection.
 
-To reduce this overhead, Go provides [`sync.Pool`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/sync/pool.go#L14-L64), a mechanism for caching and reusing objects of the same type.
-When handling a [`Get`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/sync/pool.go#L123-L158) request, [`sync.Pool`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/sync/pool.go#L14-L64) first looks for an available object in its pool.
-If none is found, it invokes a user-defined [`New`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/sync/pool.go#L60-L63) function to create one, which ultimately calls [`mallocgc`]() to allocate it on the heap.
-Once the client is done with the object, it can be returned to the pool using the [`Put`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/sync/pool.go#L98-L121) method.
-By recycling objects, [`sync.Pool`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/sync/pool.go#L14-L64) reduces both the number of heap allocations and the number of objects the garbage collector needs to scan, thereby improving performance.
+To reduce this overhead, Go provides [`sync.Pool`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L14-L64), a mechanism for caching and reusing objects of the same type.
+When handling a [`Get`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L123-L158) request, [`sync.Pool`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L14-L64) first looks for an available object in its pool.
+If none is found, it invokes a user-defined [`New`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L60-L63) function to create one, which ultimately calls [`mallocgc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L992-L1096) to allocate it on the heap.
+Once the client is done with the object, it can be returned to the pool using the [`Put`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L98-L121) method.
+By recycling objects, [`sync.Pool`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L14-L64) reduces both the number of heap allocations and the number of objects the garbage collector needs to scan, thereby improving performance.
 
-[`sync.Pool`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/sync/pool.go#L14-L64) is designed to be lock-free and efficient under high concurrency.
-To achieve this, it relies on a technique called [pinning](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/proc.go#L7120-L7155), which prevents a goroutine from being preempted while getting or putting an object in the pool.
-Since a [`sync.Pool`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/sync/pool.go#L14-L64) is local to each processor `P`, pinning ensures that the goroutine remains on the same `P` during the operation.
+[`sync.Pool`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L14-L64) is designed to be lock-free and efficient under high concurrency.
+To achieve this, it relies on a technique called [pinning](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L7120-L7155), which prevents a goroutine from being preempted while getting or putting an object in the pool.
+Since a [`sync.Pool`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L14-L64) is local to each processor `P`, pinning ensures that the goroutine remains on the same `P` during the operation.
 
-## Appendix: Basics of Main Memory
+## Conclusion
 
-As memory allocation is closely tied to operating system concepts, before we dive into how Go allocates memory, let's first understand some basics of main memory and how operating systems manage it.
-If you are already familiar with these concepts, feel free to skip this section.
-If you're not clear about some terms mentioned in later sections, you can always come back to this section for reference.
+Go’s memory allocator is designed with a clear goal in mind: to provide efficient in highly concurrent applications.
+By layering its allocation strategy across `mheap`, `mcentral`, and `mcache`, the runtime balances global coordination with per-`P` caching, minimizing lock contention while keeping allocations fast.
+Stacks, though managed differently from heap objects, follow similar principles of efficient allocation and adaptive growth.
+
+For most Go developers, these details remain hidden behind simple constructs such as `&T{}`, `new(T)`, and `make(T)`.
+Yet, understanding the internals provides valuable insight into why certain patterns perform better than others, how the garbage collector interacts with allocation, and what trade-offs the runtime makes to achieve low-latency concurrency at scale.
+As you build and optimize Go applications, keep in mind that every variable or goroutine you create is ultimately backed by these mechanisms.
+
+I hope you find this knowledge useful for writing more efficient and reliable Go programs.
+If you have any concerns, feel free to leave a comment.
+<span>
+If you really enjoyed my content, please consider
+  <span>
+    <a href="https://buymeacoffee.com/nghiant3221" target="_blank">
+      <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 2em;">
+    </a>
+  </span>! 😄
+</span>
 
 ## References
 
