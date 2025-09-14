@@ -16,8 +16,9 @@ Feel free to correct me or give suggestions in the comment section at the very b
 
 ## Introduction
 
-When you come across a strange term, you can always navigate to the [Appendix: Basics of Main Memory](#appendix-basics-of-main-memory) section at the end of this blog post for a quick refresher.
-Although it's long, it covers fundamental concepts that are essential for understanding the rest of the content.
+Before diving into how Go allocates memory, it's essential to understand some fundamental concepts about how memory works in a typical operating system.
+I suggest you read though the [Fundamental of Virtual Memory]() section first.
+If you are already familiar with those concepts, skip that section and jump directly to the next section.
 
 ## Go's View of Virtual Memory
 

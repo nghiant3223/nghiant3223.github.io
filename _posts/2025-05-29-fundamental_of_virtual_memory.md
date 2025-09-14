@@ -166,9 +166,9 @@ Developers must consider issues such as where to allocate memory, whether a give
 To address these issues, operating systems introduce the concept of *virtual memory layout*.
 From a process’s perspective, the virtual address layout appears as illustrated below, with addresses growing upward.
 
-| <img id="virtual_memory_layout.png" src="/assets/2025-05-29-fundamental_of_virtual_memory/virtual_memory_layout.png" width=400> |
-|:-------------------------------------------------------------------------------------------------------------------------:|
-|                               Virtual memory layout of an x86-64 Linux process <sup>8</sup>                               |
+| <img src="/assets/2025-05-29-fundamental_of_virtual_memory/virtual_memory_layout.png" width=400> |
+|:------------------------------------------------------------------------------------------------:|
+|                  Virtual memory layout of an x86-64 Linux process <sup>8</sup>                   |
 
 The virtual memory layout is divided into several segments:
 1. **Kernel virtual memory space**: Reserved for the kernel and is not accessible to user-space processes.
@@ -189,8 +189,8 @@ When a function is called, a new *stack frame* is created on the stack, which co
 When the function returns, its stack frame is popped off the stack, deallocating all variables within that stack frame.
 
 | <video width=500 autoplay controls id="stack_frame.mp4"><source src="/assets/2025-05-29-fundamental_of_virtual_memory/stack_frame.mp4"/></video> |
-|:------------------------------------------------------------------------------------------------------------------------------------------:|
-|                           Visualization of how process stack grows and shrinks as program executes <sup>9</sup>                            |
+|:------------------------------------------------------------------------------------------------------------------------------------------------:|
+|                              Visualization of how process stack grows and shrinks as program executes <sup>9</sup>                               |
 
 Every thread has its own stack. Since a process can have multiple threads, there may be multiple stacks within a process.
 When we refer to the "process stack",  we typically mean the stack of the main thread.
