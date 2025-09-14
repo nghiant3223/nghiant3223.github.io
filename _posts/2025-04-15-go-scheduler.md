@@ -5,9 +5,6 @@ date: 2025-04-15
 image: https://raw.githubusercontent.com/nghiant3223/nghiant3223.github.io/refs/heads/main/assets/2025-03-11-go-scheduling/primitive_scheduler.png
 ---
 
-<button id="scrollTop" title="Go to top">↑</button>
-<button id="scrollBottom" title="Go to bottom">↓</button>
-
 # Go Scheduler
 
 * [Introduction](#introduction)
@@ -16,7 +13,7 @@ image: https://raw.githubusercontent.com/nghiant3223/nghiant3223.github.io/refs/
 * [Scheduler Enhancement](#scheduler-enhancement)
 * [GMP Model](#gmp-model)
 * [Program Bootstrap](#program-bootstrap)
-* [Creating a Goroutine](#creating-goroutine)
+* [Creating a Goroutine](#creating-a-goroutine)
 * [Schedule Loop](#schedule-loop)
 * [Finding a Runnable Goroutine](#finding-a-runnable-goroutine)
 * [Goroutine Preemption](#goroutine-preemption)
@@ -29,11 +26,11 @@ image: https://raw.githubusercontent.com/nghiant3223/nghiant3223.github.io/refs/
 
 ## Disclaimer
 
-This blog post primarily focuses on [Go 1.24](https://tip.golang.org/doc/go1.24) programming language for [Linux](https://en.wikipedia.org/wiki/Linux) on [ARM](https://en.wikipedia.org/wiki/ARM_architecture_family) architecture.
-It may not cover platform-specific details for other operating systems or architectures.
+This blog post primarily focuses on [Go 1.24](https://tip.golang.org/doc/go1.24) programming language running on [Linux](https://en.wikipedia.org/wiki/Linux) on [ARM](https://en.wikipedia.org/wiki/ARM_architecture_family) architecture.
+It may not cover platform-specific details for other operating systems or hardware architectures.
 
 The content is based on other sources and my own understanding of Go, so it might not be entirely accurate.
-Feel free to correct me or give suggestions in the comment section 😄.
+Feel free to correct me or give suggestions in the comment section at the very bottom 😄.
 
 ## Introduction
 
@@ -1114,3 +1111,6 @@ Hope you will find this knowledge useful in writing more efficient and reliable 
 - <div><span id="ref-1"/><span id="ref-2"/><span id="ref-3"/>[1], [2], [3] Abraham Silberschatz, Peter B. Galvin, Greg Gagne. <a href="https://www.amazon.com/Operating-System-Concepts-Abraham-Silberschatz/dp/1119800366/ref=zg-te-pba_d_sccl_3_1/138-7692107-2007040"><i>Operating System Concepts.</i></a></div>
 
 <div class="giscus" id="reaction"></div>
+
+<button id="scrollTop" title="Go to top">↑</button>
+<button id="scrollBottom" title="Go to bottom">↓</button>

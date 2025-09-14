@@ -1,37 +1,13 @@
 ---
 layout: post
-title: "Memory Management in Go"
+title: "Garbage Collection in Go"
 date: 2025-06-03
 ---
 
-## Memory Allocation
-
-Mention page table to map virtual pages to physical frames (read "OS Concepts" book).
-
-Mention first-fit, best-fit, and segregated-fit algorithms for memory allocation (read https://www.cs.cmu.edu/afs/cs/academic/class/15213-f09/www/lectures/17-dyn-mem.pdf).
-
-Mention that there is still memory fragmentation in Go, as specified in:
-https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/sizeclasses.go#L90-L90
-
-Mention process memory layout: text, data, heap, stack, mmap regions (read "OS Concepts" book and online resource).
-
-Mention RSS and VSZ, how they relate to memory allocation (read "Linux Programming Interface" book).
-
-Mention that `mmap` system call just allocates virtual memory in between process stack and heap, Linux uses demand paging, the physical frame is not allocated until the corresponding page is accessed.
-- https://ryanstan.com/linux-demand-paging-anon-memory.html
-- https://www.kernel.org/doc/html/v5.16/admin-guide/mm/concepts.html#anonymous-memory
-- https://stackoverflow.com/questions/60076669/kernel-virtual-memory-space-and-process-virtual-memory-space
-
-Mention that Go's stack doesn't relate to the process stack, Go's heap doesn't relate to the process heap.
-Go's heap is allocated using `mmap` and is managed by the Go runtime. Go's stack and heap live in this mapped memory space.
-
-Read https://www.bytelab.codes/what-is-memory-part-3-registers-stacks-and-threads
-In stack section, mention %rsp register (if it's relevant to the discussion).
-
-## Garbage Collection
-
 Sources:
 - https://www.sobyte.net/post/2022-04/go-gc/
+- https://www.sobyte.net/post/2021-12/golang-garbage-collector/
+- https://groups.google.com/g/golang-nuts/c/eW1weV-FH1w
 
 Explain that Go GC uses tri-color mark-and-sweep algorithm. Also explain what write barrier is and how it helps the algorithm.
 See: https://www.notion.so/nghiant3223/Tri-color-Mark-Sweep-GC-20758cf2502e80d087a2c700988767b2
@@ -120,7 +96,9 @@ TEXT main.New(SB) /Users/toninguyen/Workspace/go_playground/runtime/main.go
 Mention the pseudocode of write barrier:
 https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mbarrier.go#L24-L36
 writePointer(slot, ptr):
-  shade(*slot)
-  if current stack is grey:
-    shade(ptr)
-  *slot = ptr
+shade(*slot)
+if current stack is grey:
+shade(ptr)
+*slot = ptr
+
+Mention GOGC, GOMEMLIMIT: https://www.youtube.com/watch?v=07wduWyWx8M
