@@ -315,7 +315,7 @@ This allows greater control over memory management, enabling features like custo
 ### Arena and Page
 
 As a Go process is simply a user-space application, it follows the standard virtual memory layout described in the previous section.
-Specifically, the *Stack* segment of the process is the [`g0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L529-L529) stack (aka. system stack) associated with the main thread [`M0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L117-L117) of the Go runtime.
+Specifically, the *Stack* segment of the process is the [`g0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L529-L529) stack (aka. system stack) associated with the main thread [`m0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L117-L117) of the Go runtime.
 Initialized (i.e. having non-zero value) global variables are stored in the *Data* segment, while uninitialized ones reside in the *BSS* segment.
 
 The traditional *Heap* segment, which is located under the program break, is not utilized by the Go runtime to allocate heap objects.
@@ -423,7 +423,7 @@ Whether the span belongs to scan or noscan class is determined by the parity of 
 ### Span Set
 
 In order to manage spans efficiently, Go runtime organizes them into a data structure called [*span set*](https://github.com/golang/go/blob/go1.24.0/src/runtime/mspanset.go#L14-L52).
-A span set is a collection of [`mspan`]() objects that have relationship with each other, such as belonging to the same span class.
+A span set is a collection of [`mspan`]() objects that belong to the same span class, illustrated in the figure below.
 
 | <img src="/assets/2025-06-03-memory_allocation_in_go/span_set.png" width=500> |
 |:-----------------------------------------------------------------------------:|
@@ -997,6 +997,11 @@ Since [`mcache`]() and [`mcentral`]() only manages spans of size class up to 32K
 Spans accommodating large objects can be also either *scan* or *noscan*.
 Unlike small objects, large objects do not vary by span class: *scan* spans are always 0, and *noscan* spans are always 1.
 
+When a large object is allocated, for example a slice with 1 million large structs, the kernel does not immediately commit physical memory.
+Instead, it reserves virtual address space for the allocation.
+Physical pages are only allocated when the program first writes to that region.
+This behavior is a result of the [demand paging](#demand-paging) mechanism.
+
 ## Stack Management
 
 As discussed in the [Go Scheduler](https://nghiant3223.github.io/2025/04/15/go-scheduler.html) post, both Go runtime code and user code run on threads managed by the operating system.
@@ -1081,7 +1086,7 @@ This process was known as a *stack split*.
 
 The below code snippet and figure illustrate a scenario where the `ingest` function process data from a file line by line, where stack frame of `read` scatters across two stacks.
 If the stack pointer reach some limit (the so-called [*stack guard*](#stack-guard), which will be discussed later), calls to `read` or `process` may trigger a stack split.
-Note that goroutine stacks are not contiguous in this approach.
+Please note that goroutine stack may not consist of contiguous memory regions in this approach.
 
 ```go
 func ingest(path string) {
@@ -1104,7 +1109,7 @@ func ingest(path string) {
 However, this segmented stack approach had a performance issue known as the *hot stack split* problem.
 If a function repeatedly need frequent allocation and deallocation of stacks within a tight loop, the entire process would incur a significant performance penalty.
 When the function returns, the newly allocated stack are deallocated.
-Since [each stack split takes 60 nanosecond](https://youtu.be/-K11rY57K7k?si=iGszQYxfDvDBHwWu), the issue leads to significant overhead as it happens for every iteration of the loop.
+Since [each stack split takes 60 nanosecond](https://youtu.be/-K11rY57K7k?si=QPEqFtcwfTmLj9cv&t=2496), the issue leads to significant overhead as it happens for every iteration of the loop.
 
 One trick to avoid this issue is to add *padding* to the stack frame of functions that are called frequently within loops.
 We can allocate dummy local variables to increase the stack frame size, thus reducing the likelihood of stack splits.
@@ -1164,22 +1169,199 @@ Instead, it simply checks whether the current stack pointer is below the stack g
 
 When goroutine finishes its execution, goroutine stack is shrunk due to having too much available space, or system thread managed by Go runtime exits, their stacks are marked as reusable.
 If the goroutine is currently attached with a processor `P` and the size of `P`'s stack cache is small enough, its stack is returned to the stack cache of that `P`.
-Otherwise, the stack is returned to the global pool—either small stack pool or large stack pool, depending on the size of the stack.
-When returned to the global pool, the stack will be freed and the corresponding page of memory will be returned to kernel if garbage collection is not in progress.
+Otherwise, the stack is returned to the global pool—either small stack pool with the corresponding order or large stack pool, depending on the size of the stack.
+
+When stack is returned to the global pool, the corresponding page of memory will be returned to kernel if garbage collection is not in progress.
+Check this [comment](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L245-L259) in the Go runtime source code for more details.
 
 ## Stack or Heap?
 
-Mention escape analysis.
-Mention sys.NotInHeap.
+One may think that `var n T` always allocates it on the stack, and `new(T)` or `&T{}` always allocates an object of type `T` on the heap.
+But that's not always the case in Go. Let's examine some hypothetical examples to get the problem behind and how Go addresses them.
+
+Consider the following program which defines a function `getUserByID` that retrieves a user their identifier.
+Hypothetically, `getUserByID`  allocates a `User` struct on the stack, fetches user data from a database, and returns the address of that struct, aka. returning the pointer to that struct.
+
+```go
+func getUserByID(id int64) *User {
+  var user User
+  user = db.FindUserByID(id)
+  return &user
+}
+
+func main() {
+  var userID int64 = 1
+  var user *User = getUserByID(userID)
+  var userAge = user.age
+  user.age = userAge + 1
+}
+```
+
+| <img src="/assets/2025-06-03-memory_allocation_in_go/dangling_pointer.png" width=500> |
+|:-------------------------------------------------------------------------------------:|
+|                               Dangling pointer problem                                |
+
+When `getUserByID` is called, the `user` variable is placed at address `0xe0` in its stack frame.
+After the function returns, `user` still holds the address `0xe0`, but that address is no longer valid because the stack frame of `getUserByID` has been popped.
+When `main` then tries to access `user.age`, it dereferences an invalid address, leading to a [dangling pointer](https://en.wikipedia.org/wiki/Dangling_pointer) problem and undefined behavior.
+
+To prevent such issues, Go employs a technique called [escape analysis](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/cmd/compile/internal/escape/escape.go#L1-L1), which happens during compile time.
+Escape analysis determines whether a variable—declared with `var n T`, `new(T)`, `&T{}`, or `make(T)`—could be safely allocated on goroutine stack or must *escape* to the heap.
+If a variable is recognized to be referenced outside its declaring function, it is allocated on the heap to ensure it can be safely accessed after the function returns.
+
+In the above code snippet, the `user` variable is determined to escape to the heap because its address is returned and used in `main`.
+Therefore, the compiler allocates `user` on the heap to prevent dangling pointer issues.
+
+Escape analysis also <u>attempts to keep variables on the stack, even if they would normally be heap-allocated</u> (e.g., those created with `new(T)`, `&T{}`, or `make(T)` keywords), as long as they are proven to be used only within the function scope and do not take more memory space than [`MaxImplicitStackVarSize`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/cmd/compile/internal/ir/cfg.go#L13-L19)  at compile time.
+
+You can verify these behaviors by compiling the following program with the `-gcflags="-m"` option, which instructs the compiler to print optimization decisions, including escape analysis results.
+
+```go
+package main
+
+type User struct { ID int64 }
+
+func newUser(id int64) *User {
+  user := User{ID: id}
+  return &user
+}
+
+func main() {
+  _ = newUser(20250603)
+  _ = make([]User, 100)
+}
+
+// $ go build -gcflags="-m" main.go
+// ./main.go:6:2: moved to heap: user
+// ./main.go:12:10: make([]User, 100) does not escape
+```
+
+We can see that `user` is moved to the heap because it escapes, while the slice created by `make([]User, 100)` doesn't escape because it's used only in `main` and its size is less than [`MaxImplicitStackVarSize`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/cmd/compile/internal/ir/cfg.go#L13-L19).
+
+Now, try updating the length of the slice to 1000000 and compile the program again with the same option and observe the output below.
+`user` still escapes to the heap, but this time the slice created with `make([]User, 1000000)` also escapes because its size exceeds [`MaxImplicitStackVarSize`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/cmd/compile/internal/ir/cfg.go#L13-L19), thus too large to fit on stack.
+
+```go
+// $ go build -gcflags="-m" main.go
+// ./main.go:6:2: moved to heap: user
+// ./main.go:12:10: make([]User, 1000000) escapes to heap
+```
 
 ## Case Studies
 
-### Case Study 1: Grouping Scalar Types into a Single Struct 
+As you have a better understanding of how Go allocates memory for heap objects and stacks,
+let's examine some real-world examples to understand how Go allocates memory in practice and how to optimize heap allocations.
+
+### Case Study 1: Reusing Underlying Array of Slice
+
+As you may know that a slice in Go is a descriptor containing a pointer to an underlying array, its length, and its capacity.
+When we create a new slice with `make([]T, length, capacity)`, the compiler overwrites the `make` keyword with a call to [`makeslice`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/slice.go#L92-L117) in the Go runtime.
+[`makeslice`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/slice.go#L92-L117) then calls [`mallocgc`](#heap-allocation) with the size equal to `capacity*sizeof(T)` to allocate the underlying array on the heap.
+In other words, `capacity` tracks the size of the underlying array, while `length` tracks the number of in-use elements in the array.
+
+`append` appends new elements to the end of the slice, increasing its length.
+If the new length exceeds the current capacity, `append` calls [`mallocgc`](#heap-allocation) to allocate a new underlying array twice as big, copies the existing elements to the new array, and updates the slice descriptor to point to the new array.
+
+A slice in Go can be resliced using the `[start:end]` syntax.
+Reslicing creates a new slice header that points to a subrange of elements within the same underlying array as the original slice.
+Importantly, this operation does not copy the data or allocate additional memory—the new slice simply reuses the existing array.
+See more at [Slice Intro](https://go.dev/blog/slices-intro).
+
+We can leverage the reslicing behavior to optimize heap allocations by reusing the underlying array of a slice instead of creating a new one.
+Consider the following program that parses  a CSV file processes each row one by one, where each row can have a large number of fields.
+
+```go
+package main
+
+import (
+  "bufio"
+  "os"
+)
+
+func parse(line string) []string {
+  start := 0
+  var row []string
+  for i := 0; i < len(line); i++ {
+    if line[i] == ',' {
+      row = append(row, line[start:i])
+      start = i + 1
+    }
+  }
+  row = append(row, line[start:])
+  return row
+}
+
+func process(row []string) {
+  // Process the line.
+}
+
+func main() {
+  file, _ := os.Open("input.csv")
+  defer file.Close()
+
+  scanner := bufio.NewScanner(file)
+  for scanner.Scan() {
+    line := scanner.Text()
+    row := parse(line)
+    process(row)
+  }
+}
+```
+
+Since `parse` creates an empty slice for each line, it allocates a new underlying array on the heap every time it is called.
+Plus, since `append` is called for each field in the line, it may trigger multiple heap allocations if the number of fields exceeds the initial capacity of the underlying array.
+The same path in [`mallocgc`](#heap-allocation) is executed repeatedly, leading to many wasteful heap allocations.
+
+Let's optimize the program by reusing the underlying array of the `row` slice.
+By reslicing with `row[:0]`, we reset the length of the slice to zero while keeping its capacity unchanged.
+Heap allocations only occur in the first call to `parse`, i.e. when the first line is parsed.
+For a CSV file having 1024 fields and 1000000 lines, the number of heap allocations is reduced from `1000000*log₂(1024)=10^7` to just `log₂(1024)=10` simply by reslicing.
+
+```go
+package main
+
+import (
+  "bufio"
+  "os"
+)
+
+func parse(line string, row []string) []string {
+  start := 0
+  for i := 0; i < len(line); i++ {
+    if line[i] == ',' {
+    row = append(row, line[start:i])
+      start = i + 1
+    }
+  }
+  row = append(row, line[start:])
+  return row
+}
+
+func process(row []string) {
+  // Process the line.
+}
+
+func main() {
+  file, _ := os.Open("input.csv")
+  defer file.Close()
+
+  var row []string
+  scanner := bufio.NewScanner(file)
+  for scanner.Scan() {
+    line := scanner.Text()
+    row = row[:0] // Reuse the underlying array.
+    row = parse(line, row)
+    process(row)
+  }
+}
+```
+
+### Case Study 2: Grouping Variables into a Struct 
 
 Mention 1 heap allocation optimization is grouping scalar types into a single struct allocation.
 See: https://github.com/golang/go/commit/ba7b8ca336123017e43a2ab3310fd4a82122ef9d.
 
-### Case Study 2: Reusing Objects with Built-in [`sync.Pool`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L14-L64)
+### Case Study 3: Reusing Objects with [`sync.Pool`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L14-L64)
 
 <button id="scrollTop" title="Go to top">↑</button>
 <button id="scrollBottom" title="Go to bottom">↓</button>
