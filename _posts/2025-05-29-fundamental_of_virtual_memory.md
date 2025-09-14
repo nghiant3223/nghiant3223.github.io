@@ -298,6 +298,7 @@ This allows greater control over memory management, enabling features like custo
 
 ## References
 
+- Core Dumped. [*Why is the Stack So Fast?*](https://www.youtube.com/watch?v=N3o5yHYLviQ)
 - Michael Kerrisk. [*The Linux Programming Interface*](https://man7.org/tlpi/).
 - Abraham Silberschatz, Peter B. Galvin, Greg Gagne. <a href="https://www.amazon.com/Operating-System-Concepts-Abraham-Silberschatz/dp/1119800366/ref=zg-te-pba_d_sccl_3_1/138-7692107-2007040"><i>Operating System Concepts.
 

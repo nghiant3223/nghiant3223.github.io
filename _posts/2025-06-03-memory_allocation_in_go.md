@@ -27,7 +27,7 @@ Specifically, the *Stack* segment of the process is the [`g0`](https://github.co
 Initialized (i.e. having non-zero value) global variables are stored in the *Data* segment, while uninitialized ones reside in the *BSS* segment.
 
 The traditional *Heap* segment, which is located under the program break, is not utilized by the Go runtime to allocate heap objects.
-Instead, Go runtime relies heavily on [memory-mapped segments](#memory-mapping) for allocating memory for heap objects and goroutine stacks.
+Instead, Go runtime relies heavily on [memory-mapped segments](https://nghiant3223.github.io/2025/05/29/fundamental_of_virtual_memory.html#memory-mapping) for allocating memory for heap objects and goroutine stacks.
 From now on, I'll refer to that memory-mapped segments Go uses for dynamic allocation as the *heap*, which not to be confused with the traditional process heap under the program break.
 
 | <img src="/assets/2025-06-03-memory_allocation_in_go/go_virtual_memory_view.png" width=300> |
@@ -282,7 +282,7 @@ In practice, most allocations occur close to the current hint.
 
 If no free pages are available in the radix tree, i.e. [`pageAlloc.find`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mpagealloc.go#L631-L870) returns 0, Go runtime must ask the kernel to expand its virtual address space by making an [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call.
 The growth may not be as big as the number of pages requested, but instead occurs in larger chunks rounded up to the arena size (64 MB).
-Even if only a single page is requested, the heap expands by 64 MB in virtual memory space (not physical, thanks to [demand paging](#demand-paging)!).
+Even if only a single page is requested, the heap expands by 64 MB in virtual memory space (not physical, thanks to [demand paging](https://nghiant3223.github.io/2025/05/29/fundamental_of_virtual_memory.html#demand-paging)!).
 
 To manage this, the runtime maintains a list of *hint addresses* called [`arenaHints`](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L158-L162), which are addresses it prefers the kernel to use for new allocations.
 This list is initialized before the `main` function runs, and its values can be found [here](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L477-L553).
@@ -711,13 +711,13 @@ Unlike small objects, large objects do not vary by span class: *scan* spans are 
 
 When a large object is allocated, for example a slice with 1 million large structs, the kernel does not immediately commit physical memory.
 Instead, it reserves virtual address space for the allocation.
-Physical pages are only ever allocated when the program first writes to that region, thanks to [demand paging](#demand-paging).
+Physical pages are only ever allocated when the program first writes to that region, thanks to [demand paging](https://nghiant3223.github.io/2025/05/29/fundamental_of_virtual_memory.html#demand-paging).
 
 ## Stack Management
 
 As discussed in the [Go Scheduler](https://nghiant3223.github.io/2025/04/15/go-scheduler.html) post, both Go runtime code and user code run on threads managed by the kernel.
 Each thread has its own stack—a contiguous block of memory that holds stack frames, which in turn store function parameters, local variables, and return addresses.
-Since allocating variables on the stack is simply adjusting the stack pointer (as explained in [Stack Allocation](#stack-allocation)), our focus is on how stacks are allocated and managed in Go.
+Since allocating variables on the stack is simply adjusting the stack pointer (as explained in [Stack Allocation](https://nghiant3223.github.io/2025/05/29/fundamental_of_virtual_memory.html#stack-allocation)), our focus is on how stacks are allocated and managed in Go.
 
 In Go, a thread's stack is called the *system stack*, while a goroutine's stack is simply called the *stack*.
 To manage execution contexts, the runtime introduces the [`m`]() (thread) and [`g`]() (goroutine) abstractions.
@@ -1127,7 +1127,6 @@ If you're not clear about some terms mentioned in later sections, you can always
 
 ## References
 
-- Core Dumped. [*Why is the Stack So Fast?*](https://www.youtube.com/watch?v=N3o5yHYLviQ)
 - Ankur Anand. [*A Visual Guide to Go Memory Allocator*](https://blog.ankuranand.com/2019/02/20/a-visual-guide-to-golang-memory-allocator-from-ground-up/).
 - sobyte.net. [*Go Memory Allocation*](https://www.sobyte.net/post/2022-01/go-memory-allocation/), [Go Stack Management](https://www.sobyte.net/post/2021-12/golang-stack-management/).
 - Michael Knyszek, Austin Clements. [*Scaling the Go Page Allocator*](https://go.googlesource.com/proposal/+/master/design/35112-scaling-the-page-allocator.md).
