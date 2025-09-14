@@ -3148,10 +3148,10 @@
             <mxPoint x="269.5" y="815" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="kgf02hkFsy4jsYmDKKET-17" value="Low address" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Source Code Pro;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DSource%2BCode%2BPro;" vertex="1" parent="1">
+        <mxCell id="kgf02hkFsy4jsYmDKKET-17" value="High address" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Source Code Pro;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DSource%2BCode%2BPro;" vertex="1" parent="1">
           <mxGeometry x="220" y="497" width="100" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="kgf02hkFsy4jsYmDKKET-18" value="High address" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Source Code Pro;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DSource%2BCode%2BPro;" vertex="1" parent="1">
+        <mxCell id="kgf02hkFsy4jsYmDKKET-18" value="Low address" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Source Code Pro;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DSource%2BCode%2BPro;" vertex="1" parent="1">
           <mxGeometry x="220" y="815" width="100" height="30" as="geometry" />
         </mxCell>
       </root>

@@ -4,21 +4,13 @@ title: "Memory Allocation in Go"
 date: 2025-06-03
 ---
 
-Sources:
-- https://www.sobyte.net/post/2021-12/golang-stack-management/
-- https://www.sobyte.net/post/2022-04/golang-memory-allocation/
-- https://www.sobyte.net/post/2022-01/go-memory-allocation/
-- https://blog.ankuranand.com/2019/02/20/a-visual-guide-to-golang-memory-allocator-from-ground-up/
-- https://www.sobyte.net/post/2021-12/golang-memory-allocator/
-- https://medium.com/@aditimishra_541/how-go-manages-memory-8123fd11eab9
-- 20.6.3.1 Mapping of Programs into Memory in "OS Concepts" book
-- https://www.youtube.com/watch?v=3uyiGO6a4q
-- https://www.youtube.com/watch?v=S_1YfTfuWmo
-- https://go.googlesource.com/proposal/+/master/design/35112-scaling-the-page-allocator.md
-- https://go.googlesource.com/proposal/+/refs/changes/57/202857/2/design/35112-scaling-the-page-allocator.md
-- https://segmentfault.com/a/1190000041864888/en#item-5
+## Introduction
 
 ## Basics of Main Memory
+
+As memory allocation is closely tied to operating system concepts, before we dive into how Go allocates memory, let's first understand some basics of main memory and how operating systems manage it.
+If you are already familiar with these concepts, feel free to skip this section.
+If you're not clear about some terms mentioned in later sections, you can always come back to this section for reference.
 
 ### What and Why?
 
@@ -255,7 +247,7 @@ In such case, we need to allocate the variable on the heap instead.
 
 ### Heap Allocation
 
-Allocation variables on the heap means finding a free memory block in from the heap segment or resizing the heap there is no such memory block.
+Allocation variables on the heap means finding a free memory block in from the heap segment or resizing the heap if there is no such memory block.
 The current limit of the heap is referred to as the *program break*, or *brk* as depicted in the above [figure](#virtual_memory_layout.png).
 
 Resizing the heap is just simple as telling the kernel to adjust its idea of where the process’s program break is.
@@ -976,13 +968,11 @@ After getting a free size class object, it updates information for the garbage c
 #### *Scan* Small Objects: [`mallocgcSmallScanNoHeader`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1340-L1429) and [`mallocgcSmallScanHeader`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1431-L1522)
 
 Depending on its size, small objects containing pointers are allocated by [`mallocgcSmallScanNoHeader`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1340-L1429) or [`mallocgcSmallScanHeader`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1431-L1522) function.
-If the requested `size` is less than or equal to 512 bytes, they are allocated by the former; otherwise, they are allocated by the latter.
-
-The logic of these two functions is similar to that of [`mallocgcSmallNoscan`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1254-L1338), except for span kind, layout of span, and layout of size class objects inside span.
-Regarding span kind, span class of *scan* objects is calculated as `2*sizeclass` instead of `2*sizeclass+1`.
+If the requested `size` is less than or equal to 512 bytes, allocation is handled by the former; otherwise, it is handled by the latter.
+The logic of these two functions is similar to that of [`mallocgcSmallNoscan`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1254-L1338), except for [span class](#span-class), layout of span, and layout of size class objects inside the span.
 
 Spans used by [`mallocgcSmallScanNoHeader`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1340-L1429) is different from ones used by [`mallocgcSmallNoscan`]()—it contains a special data at its end called heap bits (see [Heap Bits and Malloc Header](#heap-bits-and-malloc-header)).
-Because these spans must reserve space to store heap bits, they can accommodate less size class objects than specified in the [size class table](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/sizeclasses.go#L6-L73).
+Since these spans must reserve space to store heap bits, they can accommodate less size class objects than what specified in the [size class table](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/sizeclasses.go#L6-L73).
 The reservation logic is implemented in [`mheap.initSpan`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mheap.go#L1414-L1415) method.
 
 The layout of size class objects inside a span used by [`mallocgcSmallScanHeader`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/malloc.go#L1431-L1522) is special as well—each size class object has a malloc header (see [Heap Bits and Malloc Header](#heap-bits-and-malloc-header)) prepended to it.
@@ -999,8 +989,7 @@ Unlike small objects, large objects do not vary by span class: *scan* spans are 
 
 When a large object is allocated, for example a slice with 1 million large structs, the kernel does not immediately commit physical memory.
 Instead, it reserves virtual address space for the allocation.
-Physical pages are only allocated when the program first writes to that region.
-This behavior is a result of the [demand paging](#demand-paging) mechanism.
+Physical pages are only ever allocated when the program first writes to that region, thanks to [demand paging](#demand-paging).
 
 ## Stack Management
 
@@ -1156,7 +1145,7 @@ On Linux, this places the guard at 928 bytes above the stack bottom—800 bytes 
 
 But overflow means that stack pointer goes beyond the stack, so why is stack pointer checked against stack guard rather than the bottom of the stack?
 The reasons are explained in this [comment](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/stack.go#L17-L66) in the Go runtime source code.
-Let me explain them in simpler terms.
+Let me reexplain them in simpler terms.
 
 First, since Go allows functions not to perform stack grow checks by marking them with `//go:nosplit`, space equal to [`StackNosplitBase`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/internal/abi/stack.go#L8-L14) must be reserved so that they can execute safely without referencing any invalid address.
 For example, [`morestack`]()—which itself handles stack growth—must have its entire stack frame fit within the allocated stack.
@@ -1260,7 +1249,7 @@ When we create a new slice with `make([]T, length, capacity)`, the compiler over
 In other words, `capacity` tracks the size of the underlying array, while `length` tracks the number of in-use elements in the array.
 
 `append` appends new elements to the end of the slice, increasing its length.
-If the new length exceeds the current capacity, `append` calls [`mallocgc`](#heap-allocation) to allocate a new underlying array twice as big, copies the existing elements to the new array, and updates the slice descriptor to point to the new array.
+If the new length exceeds the current capacity, `append` calls [`mallocgc`]() to allocate a new underlying array twice as big, copies the existing elements to the new array, and updates the slice descriptor to point to the new array.
 
 A slice in Go can be resliced using the `[start:end]` syntax.
 Reslicing creates a new slice header that points to a subrange of elements within the same underlying array as the original slice.
@@ -1310,12 +1299,12 @@ func main() {
 
 Since `parse` creates an empty slice for each line, it allocates a new underlying array on the heap every time it is called.
 Plus, since `append` is called for each field in the line, it may trigger multiple heap allocations if the number of fields exceeds the initial capacity of the underlying array.
-The same path in [`mallocgc`](#heap-allocation) is executed repeatedly, leading to many wasteful heap allocations.
+The same path in [`mallocgc`]() is executed repeatedly, leading to many wasteful heap allocations.
 
 Let's optimize the program by reusing the underlying array of the `row` slice.
 By reslicing with `row[:0]`, we reset the length of the slice to zero while keeping its capacity unchanged.
 Heap allocations only occur in the first call to `parse`, i.e. when the first line is parsed.
-For a CSV file having 1024 fields and 1000000 lines, the number of heap allocations is reduced from `1000000*log₂(1024)=10^7` to just `log₂(1024)=10` simply by reslicing.
+For a CSV file having 1024 fields and 1000000 lines, the number of heap allocations is reduced from `1000000*log₂(1024)=10⁷` to just `log₂(1024)=10` simply by reslicing.
 
 ```go
 package main
@@ -1356,12 +1345,50 @@ func main() {
 }
 ```
 
-### Case Study 2: Grouping Variables into a Struct 
+### Case Study 2: Grouping Multiple Variables into a Single Struct 
 
-Mention 1 heap allocation optimization is grouping scalar types into a single struct allocation.
-See: https://github.com/golang/go/commit/ba7b8ca336123017e43a2ab3310fd4a82122ef9d.
+Recently, there was a [commit](https://github.com/golang/go/commit/ba7b8ca336123017e43a2ab3310fd4a82122ef9d) in the [`iter`](https://github.com/golang/go/tree/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/iter) package that grouped multiple scalar variables into a single struct.
+
+| <img src="/assets/2025-06-03-memory_allocation_in_go/grouping_variables_into_a_struct.png" width=800> |
+|:-----------------------------------------------------------------------------------------------------:|
+|                           Grouping multiple variables into a single struct                            |
+
+Originally, since these 7 variables outlive the function scope, all of them are allocated on the heap separately, thus results in 7 calls to [`mallocgc`]().
+Although some of these variables are smaller than 16 bytes and can be allocated by the [Tiny Objects Allocator](#tiny-objects-allocator), the overhead of 7 calls to [`mallocgc`]() is still significant if `Pull` is called frequently.
+
+By grouping these variables into a single struct, only one call to [`mallocgc`]() is needed to allocate the struct on the heap, improving memory allocation efficiency.
+This approaches has a downside, however, that it couples unrelated objects together, which prevents the garbage collector from reclaiming individual objects that are no longer needed.
+However, in this specific case, since most of these variables are used together, the trade-off is acceptable.
+
+The benchmark results in the original PR (copied below) show that the number of heap allocations is reduced from 11 to 5.
+The difference matches the above analysis, where 7 variables are grouped into a single struct, thus saving 6 calls to [`mallocgc`]().
+Also, the memory consumption and allocation time are reduced by around one-third.
+
+```
+         │ /tmp/bench.old │           /tmp/bench.new           │
+         │     sec/op     │   sec/op     vs base               │
+Pull-12       218.6n ± 7%   146.1n ± 0%  -33.19% (p=0.000 n=10)
+
+         │ /tmp/bench.old │           /tmp/bench.new           │
+         │      B/op      │    B/op     vs base                │
+Pull-12        288.0 ± 0%   176.0 ± 0%  -38.89% (p=0.000 n=10)
+
+         │ /tmp/bench.old │           /tmp/bench.new           │
+         │   allocs/op    │ allocs/op   vs base                │
+Pull-12       11.000 ± 0%   5.000 ± 0%  -54.55% (p=0.000 n=10)
+```
 
 ### Case Study 3: Reusing Objects with [`sync.Pool`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L14-L64)
 
+## References
+
+- Core Dumped. [Why is the Stack So Fast?](https://www.youtube.com/watch?v=N3o5yHYLviQ)
+- Ankur Anand. [A Visual Guide to Go Memory Allocator](https://blog.ankuranand.com/2019/02/20/a-visual-guide-to-golang-memory-allocator-from-ground-up/).
+- sobyte.net. [Go Memory Allocation](https://www.sobyte.net/post/2022-01/go-memory-allocation/), [Go Stack Management](https://www.sobyte.net/post/2021-12/golang-stack-management/).
+- Michael Knyszek, Austin Clements. [Scaling the Go Page Allocator](https://go.googlesource.com/proposal/+/master/design/35112-scaling-the-page-allocator.md).
+- Dmitry Vyukov. [Go Scheduler: Implementing Language with Lightweight Concurrency](https://www.youtube.com/watch?v=-K11rY57K7k).
+- Abraham Silberschatz, Peter B. Galvin, Greg Gagne. <a href="https://www.amazon.com/Operating-System-Concepts-Abraham-Silberschatz/dp/1119800366/ref=zg-te-pba_d_sccl_3_1/138-7692107-2007040"><i>Operating System Concepts.
+
 <button id="scrollTop" title="Go to top">↑</button>
 <button id="scrollBottom" title="Go to bottom">↓</button>
+
