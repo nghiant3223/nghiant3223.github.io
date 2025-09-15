@@ -103,7 +103,7 @@ The Go runtime organizes object sizes into a set of predefined groups called *si
 Every span belongs to exactly one size class, determined by the size of objects it contains.
 Go defines 68 distinct size classes, numbered from 0 to 67, as shown in this [table](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L6).
 Size class 0 is reserved to handle allocation for *large objects*, which is larger than 32 KB, while size class 1 to 67 are used for *tiny objects* and *small objects*.
-Note that every span belonging to some size class has a fixed number of pages and objects, as specified in the aforementioned [table](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go).
+Spans have a fixed number of pages and objects, which are determined by their size class.
 
 | <img src="/assets/2025-06-03-memory_allocation_in_go/span_with_size_class.png" width=900> |
 |:-----------------------------------------------------------------------------------------:|
