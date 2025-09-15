@@ -101,19 +101,19 @@ When I refer to an  [`mspan`](https://github.com/golang/go/blob/go1.24.0/src/run
 
 The Go runtime organizes object sizes into a set of predefined groups called *size classes*.
 Every span belongs to exactly one size class, determined by the size of objects it contains.
-Go defines 68 distinct size classes, numbered from 0 to 67, as shown in this [table](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L6).
+Go defines 68 distinct size classes, numbered from 0 to 67, as shown in this [size class table](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L6).
 Size class 0 is reserved to handle allocation for *large objects*, which is larger than 32 KB, while size class 1 to 67 are used for *tiny objects* and *small objects*.
-Spans have a fixed number of pages and objects, which are determined by their size class.
 
 | <img src="/assets/2025-06-03-memory_allocation_in_go/span_with_size_class.png" width=900> |
 |:-----------------------------------------------------------------------------------------:|
 |                           Two spans with different size classes                           |
 
-The figure above illustrates two spans: one from size class 38 (holding 2048-byte objects) and another from size class 55 (holding 10880-byte objects).
+Spans belonging to some size class contain a fixed number of pages and objects, determined by the `bytes/span` and `objects` columns in the table.
+The figure above illustrates two spans: one from [size class 38](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L44) (holding 2048-byte objects) and another from [size class 55](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L61) (holding 10880-byte objects).
 Because a single 8 KB page fits exactly four 2048-byte objects, the span for size class 38 contains 8 objects within a single page.
 Conversely, since each 10880-byte object exceeds one page, the span for size class 55 spans 4 pages, accommodating 3 objects.
 
-But why doesn't a span of size class 55 contain only one object and stretch over 2 pages, as described in the below figure?
+But why doesn't a span of [size class 55](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L61) contain only one object and stretch over 2 pages, as described in the below figure?
 The reason is to reduce memory fragmentation. Since objects within a span are contiguous, there could be a space between the last object and the end of the span.
 This space is called *tail waste*, and can be easily determined by the formula `(number of pages)*8192-(number of objects)*(object size)`.
 If the span were allocated across 2 pages, the tail waste would be `2*8192-10880*1=5504` bytes, significantly higher than the `4*8192-10880*3=128` bytes of tail waste when allocated across 4 pages.
@@ -123,7 +123,7 @@ If the span were allocated across 2 pages, the tail waste would be `2*8192-10880
 |                                  Tail waste in span                                  |
 
 While a user Go application can allocate objects of various sizes, why does Go have only 67 size classes for small objects?
-What if our application allocates a small object of size 300 bytes, which doesn't have a corresponding entry in ths size classes [table](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go)?
+What if our application allocates a small object of size 300 bytes, which doesn't have a corresponding entry in ths [size classes table](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go)?
 In such case, Go runtime will round up the size of the object to the next size class, which is 320 bytes in this case.
 The <span style="color:#a9c3aa">green</span> object illustrated so far is not an actual object allocated by user Go application, but rather a size class object managed by the Go runtime.
 
@@ -140,9 +140,9 @@ These wastes in all size class objects together with the tail waste constitutes 
 > For small & large user objects, each size class object typically holds exactly one user object.
 > For tiny user objects, however, multiple user objects can be packed into a single size class object, see [Tiny Objects Allocator](#tiny-objects-allocator).
 
-Let's consider a span of size class 55 in the worst-case scenario, where it holds three user objects, each with a size of 10241 bytes.
-The waste of 3 size class objects is `3*(10880-(10240+1))=3*639=1917` bytes (10240 is the size of the size class 54), and the tail waste is `4*8192-10880*3=128` bytes.
-Therefore, the total waste of this span is `1917+128=2045` bytes, while the span size is `4*8192=32768` bytes, resulting in the maximum total waste of `2045/32768=6.24%`, as described in the 6th column of the [size class 55](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L61) in Go's size class table.
+Let's consider a span of [size class 55](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L61) in the worst-case scenario, where it holds three user objects, each with a size of 10241 bytes, i.e. the minimum size for objects of size class 55.
+The waste of 3 size class objects is `3*(10880-10241)=3*639=1917` bytes, and the tail waste is `4*8192-10880*3=128` bytes.
+Therefore, the total waste of this span is `1917+128=2045` bytes, while the span size is `4*8192=32768` bytes, resulting in the maximum total waste of `2045/32768=6.24%`, as described in the 6th column of the size class 55 in Go's size class table.
 
 Despite the fact that Go uses segregated fit strategy, which is designed to minimize fragmentation, there is still some waste in the memory.
 The total waste of a span reflects how much memory is externally fragmented per span.
