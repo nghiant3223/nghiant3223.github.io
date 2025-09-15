@@ -280,7 +280,7 @@ Note that these numbers represent the maximum possible entries. The actual numbe
 
 | <img src="/assets/2025-06-03-memory_allocation_in_go/radix_tree_zoom.png" width=900> |
 |:------------------------------------------------------------------------------------:|
-|            A deeper look into the summary radix tree at level 2, 3 and 4             |
+|                      A deeper look into the summary radix tree                       |
 
 As mentioned earlier, each level 0 entry summaries `209715=2^21` contiguous pages, `start`, `end`, and `max` can be as big as `2^21`.
 As a result, storing all these three fields together requires up to `21*3=63` bits.
