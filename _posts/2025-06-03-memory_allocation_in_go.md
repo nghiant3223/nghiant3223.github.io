@@ -1144,8 +1144,8 @@ Pull-12       11.000 ± 0%   5.000 ± 0%  -54.55% (p=0.000 n=10)
 
 In some applications, many short-lived, stateless objects of the same type are created and discarded frequently.
 A typical example is the [`pp`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L119-L144) printer object, which is used extensively throughout the [`fmt`](https://github.com/golang/go/tree/go1.24.0/src/fmt) package to format strings in commonly used functions, such as [`Fprintf`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L220-L228) and [`Sprintf`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L236-L243).
-These functions allocate a new [`pp`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L119-L144) object, uses it to perform formatting, and then throws it away.
-If your application writes 10,000 logs per second, translating into 10,000 [`pp`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L119-L144) objects being allocated and later scanned by the garbage collector every second.
+
+If these functions allocated a new [`pp`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L119-L144) object, used it to perform formatting, and then throws it away then when your application writes 10,000 logs per second, translating into 10,000 [`pp`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L119-L144) objects being allocated and later scanned by the garbage collector every second.
 This pattern leads to significant overhead due to frequent heap allocations and garbage collection.
 
 To reduce this overhead, Go provides [`sync.Pool`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L14-L64), a mechanism for caching and reusing objects of the same type.
@@ -1153,6 +1153,9 @@ When handling a [`Get`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool
 If none is found, it invokes a user-defined [`New`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L60-L63) function to create one, which ultimately calls [`mallocgc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L992-L1096) to allocate it on the heap.
 Once the client is done with the object, it can be returned to the pool using the [`Put`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L98-L121) method.
 By recycling objects, [`sync.Pool`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L14-L64) reduces both the number of heap allocations and the number of objects the garbage collector needs to scan, thereby improving performance.
+
+In reality, [`Fprintf`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L220-L228) and [`Sprintf`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L236-L243) requests a [`pp`](https://github.com/golang/go/blob/go1.24.0/src/fmt/print.go#L119-L144) from the pool, uses it for formatting, and then returns it to the pool for future reuse.
+The [`ppFree`](https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/fmt/print.go#L146-L148) pool is initialized when the [`fmt`](https://github.com/golang/go/tree/go1.24.0/src/fmt) package is imported.
 
 [`sync.Pool`](https://github.com/golang/go/blob/go1.24.0/src/sync/pool.go#L14-L64) is designed to be lock-free and efficient under high concurrency.
 To achieve this, it relies on a technique called [pinning](https://github.com/golang/go/blob/go1.24.0/src/runtime/proc.go#L7120-L7155), which prevents a goroutine from being preempted while getting or putting an object in the pool.
