@@ -28,28 +28,28 @@ In the same way, for the CPU to process data from disk, those data must first be
 
 ## Simple Allocation Strategy
 
-Typically, there are multiple processes running on a computer, each with its own memory space allocated in main memory.
-It's the responsibility of the operating system to allocating memory for each process, ensuring that they don't interfere with each other.
-One of the simplest method of allocating memory is to assign processes to a variably sized contiguous block of memory (i.e. partition) in memory, where each block may contain exactly one process.
+Typically, there are multiple processes running on a computer, each with their own memory space allocated in main memory.
+It's the responsibility of the operating system to allocate memory for each process, ensuring that they don't interfere with each other.
+One of the simplest methods for allocating memory is to assign processes to a variably sized contiguous block of memory (i.e. partition) in memory, where each block may contain exactly one process.
 
 | <img src="/assets/2025-05-29-fundamental_of_virtual_memory/simple_allocation.png" width=500> |
 |:--------------------------------------------------------------------------------------------:|
 |                   Contiguous memory block allocation strategy <sup>1</sup>                   |
 
 When processes are created, the operating system takes into account the memory requirements of each process and the amount of available memory space to allocate a sufficient partition for it.
-After allocation, the process is loaded into memory and start its execution.
+After allocation, the process is loaded into memory and starts its execution.
 Once the process is finished, the operating system reclaims the memory block, making it available for other processes.
 If there is not enough room for an incoming process, the operating system may need to swap out some processes to disk to free up memory space.
-Alternatively, we can place such processes into await queue.
+Alternatively, we can place such processes into a wait queue.
 When memory is later released, the operating system checks the wait queue to determine if it will satisfy the memory demands of a waiting process.
 
-During allocation, the operating system must looks for a sufficiently large contiguous block of memory for the process.
+During allocation, the operating system must look for a sufficiently large contiguous block of memory for the process.
 There are many algorithms to do this, such as first-fit, best-fit, and worst-fit.
-First-fit searches for the first block that is large enough and stop searching once it finds one.
+First-fit searches for the first block that is large enough and stops searching once it finds one.
 Best-fit searches the entire memory space and finds the smallest block that is large enough.
 Worst-fit searches the entire memory space and finds the largest block that is large enough.
-First Fit and Best Fit perform better than Worst Fit in time and storage use.
-First Fit is usually faster, though storage efficiency is similar between the two.
+First-fit and Best-fit perform better than Worst-fit in time and storage use.
+First-fit is usually faster, though storage efficiency is similar between the two.
 
 ## External Fragmentation
 
@@ -76,7 +76,7 @@ Rather than a contiguous block of memory for each process, the operating system 
 
 When mentioning paging, we need to talk about *physical memory* and *virtual memory* (or *logical memory*).
 Physical memory refers to the main memory installed in the computer, while virtual memory is an abstraction that operating systems use to manage process memory.
-Process can only access virtual memory, and operating system takes care of mapping virtual memory to physical memory.
+Processes can only access virtual memory, and the operating system takes care of mapping virtual memory to physical memory.
 While the process's physical memory could be non-contiguous, from the perspective of each process, it has its own **isolated** virtual memory space, appearing as a contiguous block.
 
 > 🧑‍💻 To demonstrate the concept of virtual memory, you can try running this Go program, getting the address for later comparison, opening other programs, and then running the program again.
@@ -88,16 +88,16 @@ While the process's physical memory could be non-contiguous, from the perspectiv
 >   println(&x)
 > }
 > ```
-> You can see that even there are new processes coming in, the address of the variable remains the same.
-> That's because the variable is allocated at the same address in process's virtual memory space.
+> You can see that even though there are new processes coming in, the address of the variable remains the same.
+> That's because the variable is allocated at the same address in the process's virtual memory space.
 
-The virtual memory is divided into fix-sized blocks called *pages*, which having the same size as the frames in physical memory.
+The virtual memory is divided into fix-sized blocks called *pages*, which have the same size as the frames in physical memory.
 By separating virtual memory from physical memory and with the help of techniques such as *demand paging* (explained below), a process can access up to 18.4 million TB of memory on a 64-bit architecture, or up to 4 GB on a 32-bit architecture, even if the actual physical memory is much smaller, such as 512 MB.
 
 Each page has a page number *p*, and each frame has a frame number *f*.
 Each address has an offset *d* to identify the specific location within the page or frame.
-*p* and *f* lives in the high bits of the address, while *d* lives in the low bits.
-The mapping between virtual pages and physical frames is maintained in a per process data structure called *page table*.
+*p* and *f* live in the high bits of the address, while *d* lives in the low bits.
+The mapping between virtual pages and physical frames is maintained in a per process data structure called a *page table*.
 In a page table, each entry is indexed by a page number *p*, and the corresponding value is the frame number *f*.
 
 
@@ -114,10 +114,10 @@ In a page table, each entry is indexed by a page number *p*, and the correspondi
 |:---------------------------------------------------------------------------------------:|
 |                                Paging model <sup>3</sup>                                |
 
-Note that in fact, the structure of page table is not that simple and it can take several forms to manage memory efficiently.
+Note that in fact, the structure of a page table is not that simple and it can take several forms to manage memory efficiently.
 One common approach—[used by Linux](https://docs.kernel.org/mm/page_tables.html#mmu-tlb-and-page-faults)—is a multi-level page table, where each level contains page tables that map to the next level, eventually leading to the physical frame.
 Another method is a hashed page table, where a hash function maps virtual page numbers to entries in a hash table that point to physical frames.
-A third option is the inverted page table, where each entry represents a frame in physical memory and stores the virtual address of the page currently held there, along with information about the owning process.
+A third option is an inverted page table, where each entry represents a frame in physical memory and stores the virtual address of the page currently held there, along with information about the owning process.
 
 | <img src="/assets/2025-05-29-fundamental_of_virtual_memory/hierarchical_page_table.png" width=400> | <img src="/assets/2025-05-29-fundamental_of_virtual_memory/hashed_page_table.png" width=400> | <img src="/assets/2025-05-29-fundamental_of_virtual_memory/inverted_page_table.png" width=400> |
 |:--------------------------------------------------------------------------------------------------:|:--------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------:|
@@ -130,7 +130,7 @@ Instead of loading separate copies for each tab, the operating system maps the s
 ## Demand Paging
 
 As mentioned earlier, for a program to execute, it must first be loaded into main memory.
-However, when dealing with large programs, it’s not always necessary to load the entire program at once, only a portion currently needed.
+However, when dealing with large programs, it’s not always necessary to load the entire program at once, only the portion currently needed.
 Consider an open-world video game: while the entire map may be massive, the player only interacts with and views a small area at any given time, such as a 1 km² region around them.
 This is where demand paging comes into play.
 With demand paging, only the required pages of a program are loaded into memory on demand.
@@ -151,7 +151,7 @@ The operating system then follows these steps to handle the page fault:
 3. If the address is valid but the page is not currently in memory, the page is paged in.
 4. The operating system locates a free frame in physical memory.
 5. It instructs the disk to read the required page into the newly allocated frame.
-6. Once complete, process's internal table and page table are updated to reflect that the page is now in memory.
+6. Once complete, the process's internal table and page table are updated to reflect that the page is now in memory.
 7. The process then resumes execution from the instruction that caused the page fault.
 
 In Linux, two key memory metrics are *Resident Set Size (RSS)* and *Virtual Size (VSZ)*.
@@ -197,18 +197,18 @@ When we refer to the "process stack",  we typically mean the stack of the main t
 When a thread is created, it is assigned with a stack that is separate from the main thread's stack.
 Because each thread has an isolated stack, stack allocations do not require synchronization.
 If a new thread is created using the [`pthread_create`](https://man7.org/linux/man-pages/man3/pthread_create.3.html) system call, the kernel by default automatically selects a suitable memory region for the stack.
-Alternatively, we can manually specify the starting address of the stack by [`pthread_attr_setstack`](https://man7.org/linux/man-pages/man3/pthread_attr_setstack.3.html) system call.
+Alternatively, we can manually specify the starting address of the stack using the [`pthread_attr_setstack`](https://man7.org/linux/man-pages/man3/pthread_attr_setstack.3.html) system call.
 This behavior also applies to threads created using the [`clone`](https://man7.org/linux/man-pages/man2/clone.2.html) system call.
 
-The size of stack is fixed at the time of thread creation, and it cannot be dynamically resized.
-The default size of stack is determined by the `RLIMIT_STACK` resource limit.
-Default value of `RLIMIT_STACK` is typically 2 MB on most architectures, or 4 MB on POWER and Sparc-64.
-While `RLIMIT_STACK` is global, if we want to set stack size for a specific thread, we can use [`pthread_attr_setstacksize`](https://man7.org/linux/man-pages/man3/pthread_attr_setstacksize.3.html) to allow for larger stack if that thread allocates large automatic variables or make nested function calls great depth (perhaps because of recursion).
+The size of the stack is fixed at the time of thread creation, and it cannot be dynamically resized.
+The default size of the stack is determined by the `RLIMIT_STACK` resource limit.
+The default value of `RLIMIT_STACK` is typically 2 MB on most architectures, or 4 MB on POWER and Sparc-64.
+While `RLIMIT_STACK` is global, if we want to set the stack size for a specific thread, we can use [`pthread_attr_setstacksize`](https://man7.org/linux/man-pages/man3/pthread_attr_setstacksize.3.html) to allow for a larger stack if that thread allocates large automatic variables or makes nested function calls of great depth (perhaps because of recursion).
 
 In order to keep track of the top of the stack, the CPU uses a special register called the *stack pointer*.
 Depending on the architecture, it may be called `RSP` on x86-64, `ESP` on x86, or `SP` on ARM.
 Before a thread starts executing, the stack pointer is initialized to point to the top of the stack.
-As stack is pre-allocated in thread creation, allocating a variable on the stack is simply moving the stack pointer down, which is a very fast operation.
+As the stack is pre-allocated in thread creation, allocating a variable on the stack is simply moving the stack pointer down, which is a very fast operation.
 Loading a variable from the stack is also fast, as it only requires reading the value at the address pointed to by the stack pointer.
 
 There is also another special register called the *base pointer* (or *frame pointer*), which points to the start of the current stack frame.
@@ -235,13 +235,13 @@ When control transfers to `Q`, the base pointer `%rbp` no longer points to `P`�
 `Q` then deallocates its own stack frame by decreasing the stack pointer upon returning.
 
 Not every variable should be allocated on the stack due to the following reasons.
-Since stack allocation is determined at compile time, if variable's size is not known at this time, it can't be allocated on stack.
-Additionally, if variable is local to function `F` but still referenced by another function when `F` returns, allocating this variable on stack causes invalid address access.
+Since stack allocation is determined at compile time, if a variable's size is not known at this time, it can't be allocated on the stack.
+Additionally, if a variable is local to function `F` but still referenced by another function when `F` returns, allocating this variable on the stack causes invalid address access.
 In such case, we need to allocate the variable on the heap instead.
 
 ## Heap Allocation
 
-Allocation variables on the heap means finding a free memory block in from the heap segment or resizing the heap if there is no such memory block.
+Allocating variables on the heap means finding a free memory block in the heap segment or resizing the heap if there is no such memory block available.
 The current limit of the heap is referred to as the *program break* or abbreviated as *brk*, as depicted in the below figure.
 
 | <img src="/assets/2025-05-29-fundamental_of_virtual_memory/virtual_memory_layout.png" width=400> |
@@ -251,36 +251,36 @@ The current limit of the heap is referred to as the *program break* or abbreviat
 Resizing the heap is just simple as telling the kernel to adjust its idea of where the process’s program break is.
 After the program break is increased, the program may access any address in the newly allocated area, but no physical memory pages are allocated yet.
 The kernel automatically allocates new physical pages on the first attempt by the process to access addresses in those pages.
-Once the virtual memory for heap is expanded, the process can choose wherever memory block to hold value for variable.
+Once the virtual memory for the heap is expanded, the process can choose any memory block to hold the value of the variable.
 
-Linux offers `brk` system call to change the position of program break and `sbrk` system call for how much to increase program break.
-While programmers usually care about variable's size when allocating it, `brk` and `sbrk` is rarely used and `malloc` is used in Linux instead.
+Linux provides the `brk` system call to change the position of the program break and the `sbrk` system call for how much to increase the program break.
+While programmers usually care about a variable's size when allocating it, `brk` and `sbrk` are rarely used and `malloc` is used in Linux instead.
 
 `malloc` first scans the list of memory blocks previously released by `free` in order to find one whose size is larger than or equal to its requirements.
-Different strategies may be employed for this scan, depending on the implementation; for example, first-fit or best-fit.
+Different strategies may be employed for this scan, depending on the implementation; for example, First-fit or Best-fit.
 If the block is exactly the right size, then it is returned to the caller.
 If it is larger, then it is split, so that a block of the correct size is returned to the caller and a smaller free block is left on the free list.
 If no block on the free list is large enough, then `malloc` calls `sbrk` to allocate more memory.
-To reduce the number of calls to `sbrk`, rather than allocating exactly the amount of memory required, `malloc` increases the program break in larger units, putting the excess memory onto the free list.
+To reduce the number of calls to `sbrk`, rather than allocating the exact amount of memory required, `malloc` increases the program break in larger units, putting the excess memory onto the free list.
 
-The figure below depicts how `malloc` manages memory blocks in heap, which is a one-dimensional array of memory address.
-Each memory block, apart from the actual space used for storing value of variables, it also stores its metadata such as the length of the block, pointer to previous block and next block in the free list.
-These metadata allows `malloc` and `free` to function properly.
+The figure below depicts how `malloc` manages memory blocks in the heap, which is a one-dimensional array of memory addresses.
+Each memory block, apart from the actual space used for storing value of variables, also stores its metadata such as the length of the block and pointers to the pervious and next blocks in the free list.
+This metadata allows `malloc` and `free` to function properly.
 
 | <img src="/assets/2025-05-29-fundamental_of_virtual_memory/free_list_visualization.png" width=300> |
 |:--------------------------------------------------------------------------------------------------:|
 |                                Free list visualization<sup>11</sup>                                |
 
-As heap is shared across threads, to avoid corruption in multithreaded applications, mutexes are used internally to protect the memory-management data structures employed by these functions.
+As the heap is shared across threads, to avoid corruption in multithreaded applications, mutexes are used internally to protect the memory-management data structures employed by these functions.
 In a multithreaded application in which threads simultaneously allocate and free memory, there could be contention for these mutexes.
 Therefore, heap allocation is less efficient than stack allocation.
 
 ## Memory Mapping
 
-As depicted in virtual memory layout figure below, apart from the heap and stack, there is also a memory segment called *memory mapped regions*.
+As depicted in the virtual memory layout figure below, apart from the heap and the stack, there is also a memory segment called *memory mapped regions*.
 There are two types of memory mapping: file mapping and anonymous mapping.
-A file-mapping maps a region of a file directly into the calling process’s virtual memory, allowing its contents can be accessed by operations on the bytes in the corresponding memory region.
-An anonymous mapping doesn’t have a corresponding file; instead, the pages of the mapping are initialized to 0.
+A file-mapping maps a region of a file directly into the calling process’s virtual memory, allowing its contents to be accessed by operations on the bytes in the corresponding memory region.
+An anonymous mapping doesn't have a corresponding file; instead, the pages of the mapping are initialized to 0.
 Another way of thinking of an anonymous mapping is that it is a mapping of a virtual file whose contents are always initialized with zeros.
 
 | <img src="/assets/2025-05-29-fundamental_of_virtual_memory/memory_layout_elf.png" width=400> |
