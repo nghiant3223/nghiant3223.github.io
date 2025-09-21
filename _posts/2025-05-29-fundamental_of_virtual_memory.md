@@ -264,7 +264,7 @@ If no block on the free list is large enough, then `malloc` calls `sbrk` to allo
 To reduce the number of calls to `sbrk`, rather than allocating the exact amount of memory required, `malloc` increases the program break in larger units, putting the excess memory onto the free list.
 
 The figure below depicts how `malloc` manages memory blocks in the heap, which is a one-dimensional array of memory addresses.
-Each memory block, apart from the actual space used for storing value of variables, also stores its metadata such as the length of the block and pointers to the pervious and next blocks in the free list.
+Each memory block, apart from the actual space used for storing value of variables, also stores its metadata such as the length of the block and pointers to the previous and next blocks in the free list.
 This metadata allows `malloc` and `free` to function properly.
 
 | <img src="/assets/2025-05-29-fundamental_of_virtual_memory/free_list_visualization.png" width=300> |
