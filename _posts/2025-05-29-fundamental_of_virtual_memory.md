@@ -298,12 +298,6 @@ Another way of thinking of an anonymous mapping is that it is a mapping of a vir
 |:--------------------------------------------------------------------------------------------:|
 |                         Memory layout for ELF programs <sup>12</sup>                         |
 
-Linux provides the [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call to create a new memory mapping in the virtual address space of a process.
-The parameter most worth mentioning is `addr`, which specifies the preferred starting address of the mapping.
-If `addr` is set to `NULL`, the kernel automatically selects a suitable address.
-If a non-`NULL` value is provided, the kernel treats it as a hint and attempts to place the mapping near that address, rounding as needed to the nearest page boundary.
-In all cases, the kernel ensures that the chosen address does not conflict with existing mappings.
-
 A memory mapped region can be *private* (aka. *copy-on-write*) or *shared*.
 By private, it means that the memory region is only accessible by the process that created it.
 Whenever a process attempts to modify the contents of a page, the kernel first creates a new, separate copy of that page for the process and adjusts the process's page tables.
@@ -316,6 +310,12 @@ The read accesses will result in creation of a page table entry that references 
 
 Since anonymous memory mappings are not backed by a file and are always zero-initialized, they are ideal for programs that implement their own memory allocation strategies—such as Go—rather than relying on the operating system's default allocators like `malloc` and `free`.
 This allows greater control over memory management, enabling features like custom allocators or garbage collection tailored to the runtime's needs.
+
+Linux provides the [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call to create a new memory mapping in the virtual address space of a process.
+The parameter most worth mentioning is `addr`, which specifies the preferred starting address of the mapping.
+If `addr` is set to `NULL`, the kernel automatically selects a suitable address.
+If a non-`NULL` value is provided, the kernel treats it as a hint and attempts to place the mapping near that address, rounding as needed to the nearest page boundary.
+In all cases, the kernel ensures that the chosen address does not conflict with existing mappings.
 
 ## References
 
