@@ -40,7 +40,7 @@ Feel free to correct me or give suggestions in the comment section at the very b
 > If you're new to these concepts, consider reviewing them before continuing.
 
 Go or Golang, introduced in 2009, has steadily grown in popularity as a programming language for building concurrent applications.
-It is designed to be simple, efficient, and easy to use, with a focus on concurrency programming.
+It is designed to be simple, efficient, and easy to use.
 
 Go's concurrency model is built around the concept of goroutines, which are lightweight user threads managed by the Go runtime on user space.
 Go offers useful primitives for synchronization, such as channels, to help developers write concurrent code easily.
