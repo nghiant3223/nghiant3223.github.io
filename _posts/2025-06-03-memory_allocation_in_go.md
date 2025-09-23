@@ -73,7 +73,7 @@ From now on, I'll refer to that memory-mapped segments Go uses for dynamic alloc
 
 To manage this memory efficiently, Go runtime partitions these memory-mapped segments into hierarchical units, ranging from coarse-grained to fine-grained.
 The most coarse-grained units are known as an [*arenas*](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L245-L311), a fixed-size region of 64 MB.
-Arenas are not required to be contiguous due to the characteristic of [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call, which [*may return a different address than requested*](https://man7.org/linux/man-pages/man2/mmap.2.html#DESCRIPTION).
+Go runtime tries to make arenas contiguous, but they are not necessarily so due to the behavior of [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call, which [*may return a different address than requested*](https://man7.org/linux/man-pages/man2/mmap.2.html#DESCRIPTION).
 
 Each arena is further subdivided into smaller fixed-size units called *pages*, each measuring 8 KB.
 It's important to note that these runtime-managed pages differ from the typical OS pages discussed in the fundamental [post](https://nghiant3223.github.io/2025/05/29/fundamental_of_virtual_memory.html), which are commonly 4 KB in size.
