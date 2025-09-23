@@ -30,7 +30,7 @@ In the same way, for the CPU to process data from disk, those data must first be
 
 Typically, there are multiple processes running on a computer, each with their own memory space allocated in main memory.
 It's the responsibility of the operating system to allocate memory for each process, ensuring that they don't interfere with each other.
-One of the simplest methods for allocating memory is to assign processes to a variably sized contiguous block of memory (i.e. partition) in memory, where each block may contain exactly one process.
+One of the simplest methods for allocating memory is to assign processes to a variably sized contiguous block of memory in memory, where each block may contain exactly one process.
 
 | <img src="/assets/2025-05-29-fundamental_of_virtual_memory/simple_allocation.png" width=500> |
 |:--------------------------------------------------------------------------------------------:|
@@ -100,12 +100,11 @@ Each address has an offset *d* to identify the specific location within the page
 The mapping between virtual pages and physical frames is maintained in a per process data structure called a *page table*.
 In a page table, each entry is indexed by a page number *p*, and the corresponding value is the frame number *f*.
 
-
 | <img src="/assets/2025-05-29-fundamental_of_virtual_memory/page_table.png" width=550> |
 |:-------------------------------------------------------------------------------------:|
 |                             Paging hardware <sup>2</sup>                              |
 
-<p style="margin-bottom: 5px">In order to obtain the physical address of a virtual one, the following steps are performed:</p>
+In order to obtain the physical address of a virtual one, the following steps are performed:
 1. The page number *p* is extracted from the virtual address.
 2. The page table is accessed to retrieve the corresponding frame number *f*.
 3. Replace the page number *p* with the frame number *f* in the virtual address.
@@ -136,8 +135,8 @@ This is where demand paging comes into play.
 With demand paging, only the required pages of a program are loaded into memory on demand.
 
 | <img src="/assets/2025-05-29-fundamental_of_virtual_memory/demand_paging.png" width=400> |
-|:----------------------------------------------------------------------------------:|
-|                             Demand paging <sup>7</sup>                             |
+|:----------------------------------------------------------------------------------------:|
+|                                Demand paging <sup>7</sup>                                |
 
 As a process executes, some of its pages are loaded into memory, while others remain on disk storage (i.e., backing store).
 To manage this, an additional column called the *valid-invalid bit* is included in the page table to indicate the status of each page.
@@ -151,7 +150,7 @@ The operating system then follows these steps to handle the page fault:
 3. If the address is valid but the page is not currently in memory, the page is paged in.
 4. The operating system locates a free frame in physical memory.
 5. It instructs the disk to read the required page into the newly allocated frame.
-6. Once complete, the process's internal table and page table are updated to reflect that the page is now in memory.
+6. Once complete, the process's internal table and page table are updated to reflect the presence of the page.
 7. The process then resumes execution from the instruction that caused the page fault.
 
 In Linux, two key memory metrics are *Resident Set Size (RSS)* and *Virtual Size (VSZ)*.
@@ -286,6 +285,12 @@ Another way of thinking of an anonymous mapping is that it is a mapping of a vir
 | <img src="/assets/2025-05-29-fundamental_of_virtual_memory/memory_layout_elf.png" width=400> |
 |:--------------------------------------------------------------------------------------------:|
 |                         Memory layout for ELF programs <sup>12</sup>                         |
+
+Linux provides the [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html) system call to create a new memory mapping in the virtual address space of a process.
+The parameter most worth mentioning is `addr`, which specifies the preferred starting address of the mapping.
+If `addr` is set to `NULL`, the kernel automatically selects a suitable address.
+If a non-`NULL` value is provided, the kernel treats it as a hint and attempts to place the mapping near that address, rounding as needed to the nearest page boundary.
+In all cases, the kernel ensures that the chosen address does not conflict with existing mappings.
 
 A memory mapped region can be *private* (aka. *copy-on-write*) or *shared*.
 By private, it means that the memory region is only accessible by the process that created it.
