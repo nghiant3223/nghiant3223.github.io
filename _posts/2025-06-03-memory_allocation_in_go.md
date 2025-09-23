@@ -760,7 +760,7 @@ Since allocating variables on the stack is simply adjusting the stack pointer (a
 
 In Go, a thread's stack is called the *system stack*, while a goroutine's stack is simply called the *stack*.
 To manage execution contexts, the runtime introduces the [`m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L528-L630) (thread) and [`g`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L396-L508) (goroutine) abstractions.
-Every [`g`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L396-L508) has a [`stack`]() field recording the start and end addresses of its stack.
+Every [`g`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L396-L508) has a [`stack`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L382-L388) field recording the start and end addresses of its stack.
 Each [`m`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L528-L630) has a special [`g0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L529-L529) goroutine, whose stack represents the system stack.
 The runtime uses [`g0`](https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L529-L529) when performing operations that must run on the system stack rather than a goroutine stack, such as growing or shrinking a goroutine's stack.
 
