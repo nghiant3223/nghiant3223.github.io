@@ -1113,7 +1113,7 @@ Recently, there was a [commit](https://github.com/golang/go/commit/ba7b8ca336123
 
 | <img src="/assets/2025-06-03-memory_allocation_in_go/grouping_variables_into_a_struct.png" width=800> |
 |:-----------------------------------------------------------------------------------------------------:|
-|                           Grouping multiple variables into a single struct                            |
+|             Change that groups multiple variable declarations into one struct declaration             |
 
 Originally, since these 7 variables outlive the function scope, all of them are allocated on the heap separately, thus results in 7 calls to [`mallocgc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L992-L1096).
 Although some of these variables are smaller than 16 bytes and can be allocated by the [Tiny Objects Allocator](#tiny-objects-allocator), the overhead of 7 calls to [`mallocgc`](https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L992-L1096) is still significant if `Pull` is called frequently.
