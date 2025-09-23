@@ -6,6 +6,18 @@ date: 2025-05-29
 
 # Fundamental of Virtual Memory
 
+## Contents
+
+- [What and Why?](#what-and-why)
+- [Simple Allocation Strategy](#simple-allocation-strategy)
+- [External Fragmentation](#external-fragmentation)
+- [Memory Paging](#memory-paging)
+- [Demand Paging](#demand-paging)
+- [Virtual Memory Layout](#virtual-memory-layout)
+- [Stack Allocation](#stack-allocation)
+- [Heap Allocation](#heap-allocation)
+- [Memory Mapping](#memory-mapping)
+
 ## What and Why?
 
 Have you ever wondered why computers need main memory (RAM) when they already have disk storage? The answer lies in access speed.
