@@ -228,7 +228,7 @@ Let's dive into how it overcomes these bottlenecks and manages memory allocation
 #### Tracking Free Pages
 
 Because the virtual address space is large, and each page’s state (free or in-use) is a binary property, it is efficient to store this information in a bitmap where `1` represents in-use and `0` represents free.
-Note that in-use or free in this context refers to whether the page is handed to [`mcentral`](#central-span-manager-mcentral) or not, not whether it is in-use or free by the user Go application.
+Note that in-use or free in this context refers to whether the page is owned by a span or not, not whether it is in-use or free by the user Go application.
 Each bitmap is an array of 8 `uint64` values, taking 64 bytes in total, and can represent the state of 512 contiguous pages.
 
 Given that an arena is 64 MB in size and each page is 8 KB, there are `64MB/8KB=8192` pages in an arena.
