@@ -6,8 +6,110 @@ date: 2025-06-03
 
 Sources:
 - https://www.sobyte.net/post/2022-04/go-gc/
+- https://www.sobyte.net/post/2022-01/go-gc/
 - https://www.sobyte.net/post/2021-12/golang-garbage-collector/
 - https://groups.google.com/g/golang-nuts/c/eW1weV-FH1w
+- https://github.com/golang/proposal/blob/master/design/17503-eliminate-rescan.md
+
+## Tri-color Mark-and-Sweep Algorithm
+
+- Initially, all objects are in the white set (unreachable).
+- Add all root objects to the gray set.
+- While the gray set is not empty:
+  - Pick an object O from the gray set.
+  - Remove O from the gray set and move it to the black set.
+  - Add all objects that O references and are in the white set to the gray set and remove them from the white set.
+- After the marking phase, all objects in the white set are unreachable and can be collected.
+
+### Dijkstra's Insert Write Barriers
+
+Dijkstra's insert write barrier (strong variance): prevents black→white edges.
+Dijkstra says: "If I point to something new, make sure it’s marked."
+```
+writePointer(object, field, value):
+    if object is black and value is white:
+        shade(value) // Make the pointed object gray if it is white.
+    object.field = value
+```
+
+Consider the following program:
+```go
+  a := &Object{}
+  b := &Object{}
+
+  a.Next = b
+```
+
+Timeline without write barrier:
+T1 [mutator] `a` := &Object{} // `a` is white
+T2 [mutator] `b` := &Object{} // `b` is white
+T3 [collector] add `a` to gray set.
+T4 [collector] move `a` from gray set to black set.
+T5 [mutator] `a.Next` = `b` // `a` is black, `b` is white
+T6 [collector] finish marking phase. `b` is white, so it will be collected.
+
+Timeline with write barrier:
+T1 [mutator] `a` := &Object{} // `a` is white
+T2 [mutator] `b` := &Object{} // `b` is white
+T3 [collector] add `a` to gray set.
+T4 [collector] move `a` from gray set to black set.
+T5 [mutator] `a.Next` = `b` // `a` is black, `b` is added to gray set.
+T6 [collector] move `b` from gray set to black set.
+T7 [collector] finish marking phase. Both `a` and `b` are black, so they will not be collected.
+
+According to https://github.com/golang/proposal/blob/master/design/17503-eliminate-rescan.md, there is a trade-off for pointers on stacks:
+1) write to pointers on stack must have write barrier or 2) stack must be rescanned at the end of every GC cycle.
+Go chooses the latter, which means that many stacks must be re-scanned during STW.
+
+### Yuasa's Deletion Write Barriers
+
+RULE: The concurrent and incremental garbage collector operates conservatively, i.e.
+it should prefer retaining unused objects rather than reclaiming them prematurely.
+Any object that was reachable at the start of the marking phase must not be collected during that phase,
+it must remain considered reachable until the end of the marking phase.
+
+Yuasa's deletion write barrier (weak variance): prevent black→white edges without another path that black→gray→white.
+Yuasa says: “If I stop pointing to something, mark it before I lose it.”
+Yuasa deletion write barrier prevents hanging pointers: https://www.sobyte.net/post/2022-01/go-gc/#missing-marker---hanging-pointer-problem.
+
+```
+writePointer(object, field, value):
+    old_value = object.field
+    if old_value is white:
+        shade(old_value) // Mark the old (about-to-be-overwritten) object gray if it's white.
+    object.field = value
+```
+
+Consider the following program:
+```go
+a.Next = b
+b.Next = c
+
+b.Next = nil
+a.Next = c
+```
+
+Timeline without write barrier:
+T1 [mutator] `a.Next` = `b` // `a` is white, `b` is white
+T2 [mutator] `b.Next` = `c` // `b` is white, `c` is white
+T3 [collector] add `a` to gray set
+T4 [collector] move `a` from gray set to black set, add `b` to gray set
+T5 [mutator] `b.Next` = nil // `b` is grey, `c` is white
+T6 [collector] move `b` from gray set to black set, `c` is still white because noone points to it.
+T7 [collector] finish marking phase. `c` is white, so it will be collected. <- GC cycle ends here. C is reachable at cycle start but not at cycle end, not satisfying the RULE.
+T8 [mutator] `a.Next` = `c` // hanging pointer
+T9 [collector] `c` is collected, but `a` points to it.
+
+Timeline with write barrier:
+T1 [mutator] `a.Next` = `b` // `a` is white, `b` is white
+T2 [mutator] `b.Next` = `c` // `b` is white, `c` is white
+T3 [collector] add `a` to gray set
+T4 [collector] move `a` from gray set to black set, add `b` to gray set
+T5 [mutator] `b.Next` = nil // `c` is grey
+T6 [collector] move `b` and `c` from gray set to black set
+T7 [collector] finish marking phase. Both `b` and `c` are black, so they will not be collected. <- GC cycle ends here. C is reachable at both cycle start end cycle end, not satisfying the RULE.
+
+===
 
 Explain that Go GC uses tri-color mark-and-sweep algorithm. Also explain what write barrier is and how it helps the algorithm.
 See: https://www.notion.so/nghiant3223/Tri-color-Mark-Sweep-GC-20758cf2502e80d087a2c700988767b2

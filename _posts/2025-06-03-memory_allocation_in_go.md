@@ -110,7 +110,7 @@ Size class 0 is reserved to handle allocation for *large objects*, which is larg
 
 Spans belonging to some size class contain a fixed number of pages and objects, determined by the `bytes/span` and `objects` columns in the table.
 The figure above illustrates two spans: one from [size class 38](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L44) (holding 2048-byte objects) and another from [size class 55](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L61) (holding 10880-byte objects).
-Because a single 8 KB page fits exactly four 2048-byte objects, the span for size class 38 contains 8 objects within a single page.
+Because a single 8 KB page fits exactly eight 1024-byte objects, the span for size class 38 contains 8 objects within a single page.
 Conversely, since each 10880-byte object exceeds one page, the span for size class 55 spans 4 pages, accommodating 3 objects.
 
 But why doesn't a span of [size class 55](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L61) contain only one object and stretch over 2 pages, as described in the below figure?
@@ -150,7 +150,7 @@ The total waste of a span reflects how much memory is externally fragmented per 
 ### Span Class
 
 Go’s garbage collector is a tracing garbage collector, which means it needs to traverse the object graph to identify all reachable objects during a collection cycle.
-However, if a type is known to contain no pointers neither directly nor through its fields, e.g. a struct that has multiple fields and some of the fields contain pointer to primitive types for pointer to another struct, then the garbage collector can safely skip scanning objects of that type to reduce overhead and improve performance, right?
+However, if a type is known to contain no pointers neither directly nor through its fields, e.g. a struct that has multiple fields and some of the fields contain pointer to primitive types or pointer to another struct, then the garbage collector can safely skip scanning objects of that type to reduce overhead and improve performance, right?
 The presence or absence of pointers in a type is determined at compile time, so this optimization comes with no additional runtime cost.
 
 To facilitate this behavior, the Go runtime introduces the concept of a [*span class*](https://github.com/golang/go/blob/go1.24.0/src/runtime/mheap.go#L556-L562).
