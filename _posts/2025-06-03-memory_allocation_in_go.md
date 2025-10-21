@@ -905,9 +905,9 @@ On Linux, this places the guard at 928 bytes above the stack bottom—800 bytes 
 |                 The position of stack guard in a goroutine stack                 |
 
 
-But overflow means that stack pointer goes beyond the stack, so why is stack pointer checked against stack guard rather than the bottom of the stack?
+But overflow means that stack pointer goes beyond the stack, so why is the stack pointer checked against the stack guard rather than the bottom of the stack?
 The reasons are explained in this [comment](https://github.com/golang/go/blob/go1.24.0/src/runtime/stack.go#L17-L66) in the Go runtime source code.
-Let me reexplain them in simpler terms.
+Let me re-explain them in simpler terms.
 
 First, since Go allows functions not to perform stack grow checks by marking them with `//go:nosplit`, space equal to [`StackNosplitBase`](https://github.com/golang/go/blob/go1.24.0/src/internal/abi/stack.go#L8-L14) must be reserved so that they can execute safely without referencing any invalid address.
 For example, [`morestack`](https://github.com/golang/go/blob/go1.24.0/src/runtime/asm_arm64.s#L294-L346)—which itself handles stack growth—must have its entire stack frame fit within the allocated stack.
