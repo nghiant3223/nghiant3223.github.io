@@ -11,9 +11,19 @@ Sources:
 - https://groups.google.com/g/golang-nuts/c/eW1weV-FH1w
 - https://github.com/golang/proposal/blob/master/design/17503-eliminate-rescan.md
 
+## Terminology
+
+- Mutator: goroutines that allocates and modifies objects.
+- Collector: goroutines that performs garbage collection.
+
 ## Tri-color Mark-and-Sweep Algorithm
 
-- Initially, all objects are in the white set (unreachable).
+Objects are classified into 3 colors:
+- White: Unseen objects, potentially unreachable.
+- Gray: Seen objects, but their references have not been fully explored.
+- Black: Seen objects, and all their references have been fully explored.
+
+- Initially, all objects are in the white set.
 - Add all root objects to the gray set.
 - While the gray set is not empty:
   - Pick an object O from the gray set.
@@ -21,15 +31,16 @@ Sources:
   - Add all objects that O references and are in the white set to the gray set and remove them from the white set.
 - After the marking phase, all objects in the white set are unreachable and can be collected.
 
-### Dijkstra's Insert Write Barriers
+### Dijkstra's Insert Write-Barriers
 
-Dijkstra's insert write barrier (strong variance): prevents black→white edges.
-Dijkstra says: "If I point to something new, make sure it’s marked."
+Dijkstra insert write-barrier (strong variance): prevents black→white edges.
+Dijkstra write-barrier says: "If I point to something new, make sure it’s marked."
+Dijkstra writ-barrier lets concurrent marking start right away, but requires a STW at the end of marking to re-scan stacks.
+
 ```
 writePointer(object, field, value):
-    if object is black and value is white:
-        shade(value) // Make the pointed object gray if it is white.
-    object.field = value
+  shade(value) // Make the pointed object gray if it is white.
+  object.field = value
 ```
 
 Consider the following program:
@@ -40,7 +51,7 @@ Consider the following program:
   a.Next = b
 ```
 
-Timeline without write barrier:
+Timeline without write-barrier:
 T1 [mutator] `a` := &Object{} // `a` is white
 T2 [mutator] `b` := &Object{} // `b` is white
 T3 [collector] add `a` to gray set.
@@ -48,7 +59,7 @@ T4 [collector] move `a` from gray set to black set.
 T5 [mutator] `a.Next` = `b` // `a` is black, `b` is white
 T6 [collector] finish marking phase. `b` is white, so it will be collected.
 
-Timeline with write barrier:
+Timeline with write-barrier:
 T1 [mutator] `a` := &Object{} // `a` is white
 T2 [mutator] `b` := &Object{} // `b` is white
 T3 [collector] add `a` to gray set.
@@ -58,26 +69,29 @@ T6 [collector] move `b` from gray set to black set.
 T7 [collector] finish marking phase. Both `a` and `b` are black, so they will not be collected.
 
 According to https://github.com/golang/proposal/blob/master/design/17503-eliminate-rescan.md, there is a trade-off for pointers on stacks:
-1) write to pointers on stack must have write barrier or 2) stack must be rescanned at the end of every GC cycle.
+
+1. write to pointers on stack must have write-barrier
+2. stack must be rescanned at the end of every GC cycle.
+
 Go chooses the latter, which means that many stacks must be re-scanned during STW.
 
-### Yuasa's Deletion Write Barriers
+### Yuasa's Deletion Write-Barriers
 
 RULE: The concurrent and incremental garbage collector operates conservatively, i.e.
 it should prefer retaining unused objects rather than reclaiming them prematurely.
 Any object that was reachable at the start of the marking phase must not be collected during that phase,
 it must remain considered reachable until the end of the marking phase.
 
-Yuasa's deletion write barrier (weak variance): prevent black→white edges without another path that black→gray→white.
-Yuasa says: “If I stop pointing to something, mark it before I lose it.”
-Yuasa deletion write barrier prevents hanging pointers: https://www.sobyte.net/post/2022-01/go-gc/#missing-marker---hanging-pointer-problem.
+Yuasa deletion write-barrier (weak variance): prevent black→white edges without another path that black→gray→white.
+Yuasa write-barrier says: “If I stop pointing to something, mark it before I lose it.”
+Yuasa deletion write-barrier prevents hanging pointers: https://www.sobyte.net/post/2022-01/go-gc/#missing-marker---hanging-pointer-problem.
+Yuasa write-barrier requires a STW at the beginning of marking to either scan or snapshot stacks, but does not require a re-scan at the end of marking.
 
 ```
 writePointer(object, field, value):
-    old_value = object.field
-    if old_value is white:
-        shade(old_value) // Mark the old (about-to-be-overwritten) object gray if it's white.
-    object.field = value
+  old_value = object.field
+  shade(old_value)
+  object.field = value
 ```
 
 Consider the following program:
@@ -89,7 +103,7 @@ b.Next = nil
 a.Next = c
 ```
 
-Timeline without write barrier:
+Timeline without write-barrier:
 T1 [mutator] `a.Next` = `b` // `a` is white, `b` is white
 T2 [mutator] `b.Next` = `c` // `b` is white, `c` is white
 T3 [collector] add `a` to gray set
@@ -100,7 +114,7 @@ T7 [collector] finish marking phase. `c` is white, so it will be collected. <- G
 T8 [mutator] `a.Next` = `c` // hanging pointer
 T9 [collector] `c` is collected, but `a` points to it.
 
-Timeline with write barrier:
+Timeline with write-barrier:
 T1 [mutator] `a.Next` = `b` // `a` is white, `b` is white
 T2 [mutator] `b.Next` = `c` // `b` is white, `c` is white
 T3 [collector] add `a` to gray set
@@ -109,11 +123,37 @@ T5 [mutator] `b.Next` = nil // `c` is grey
 T6 [collector] move `b` and `c` from gray set to black set
 T7 [collector] finish marking phase. Both `b` and `c` are black, so they will not be collected. <- GC cycle ends here. C is reachable at both cycle start end cycle end, not satisfying the RULE.
 
+### Go's Hybrid Write-Barriers
+
+Hybrid says: "If I stop pointing to something, mark it before I lose it. If I point to something new, make sure it’s marked if stack has been discovered but not fully scanned (that goroutine may be in the middle of scanning its stack frames)."
+The hybrid barrier inherits the best properties of both Yuasa and Dijkstra, allowing stacks to be concurrently scanned at the beginning of the mark phase, while also keeping stacks black after this initial scan.
+
+```
+writePointer(object, field, value):
+  old_value = object.field
+  shade(old_value)
+  
+  if stack is grey: # stack is in the middle of being scanned.
+    shade(value)
+ 
+  object.field = value
+```
+
+Hybrid write-barrier prevents rescanning stacks at the end of the marking phase.
+Because at that time, stack is scanned and therefore only points to shaded objects.
+
+You may wonder that after a stack is scanned, if a stack points to a new heap allocated object, then that object may be white and unreachable.
+However, during marking phase, if an object is allocated, it's automatically added to the gray set, so it won't be collected.
+See the code where objects are automatically shaded: https://github.com/golang/go/blob/go1.24.0/src/runtime/malloc.go#L1565-L1571.
+
+But if newly allocated object is automatically added to gray set, then why do we need `shade(value)` in the write-barrier?
+Because stack may point to an old object that is not allocated during marking phase, and that object may be white.
+
 ===
 
-Explain that Go GC uses tri-color mark-and-sweep algorithm. Also explain what write barrier is and how it helps the algorithm.
+Explain that Go GC uses tri-color mark-and-sweep algorithm. Also explain what write-barrier is and how it helps the algorithm.
 See: https://www.notion.so/nghiant3223/Tri-color-Mark-Sweep-GC-20758cf2502e80d087a2c700988767b2
-Mention that write barrier could slow down the program.
+Mention that write-barrier could slow down the program.
 See: https://ihagopian.com/posts/write-barriers-in-the-go-garbage-collector
 
 Explain why there are 3 colors in tri-color mark-and-sweep algorithm: white, gray, and black.
@@ -136,7 +176,7 @@ Mention that sweepgen increases by 2 every GC cycle.
 https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mgc.go#L1684-L1684
 https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mheap.go#L474-L480
 
-Explain write barrier with this program:
+Explain write-barrier with this program:
 ```go
 package main
 
@@ -195,7 +235,7 @@ TEXT main.New(SB) /Users/toninguyen/Workspace/go_playground/runtime/main.go
   main.go:8		0x100066bbc		00000000		?
 ```
 
-Mention the pseudocode of write barrier:
+Mention the pseudocode of write-barrier:
 https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/mbarrier.go#L24-L36
 writePointer(slot, ptr):
 shade(*slot)

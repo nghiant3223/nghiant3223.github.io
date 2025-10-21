@@ -110,7 +110,7 @@ Size class 0 is reserved to handle allocation for *large objects*, which is larg
 
 Spans belonging to some size class contain a fixed number of pages and objects, determined by the `bytes/span` and `objects` columns in the table.
 The figure above illustrates two spans: one from [size class 38](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L44) (holding 2048-byte objects) and another from [size class 55](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L61) (holding 10880-byte objects).
-Because a single 8 KB page fits exactly eight 1024-byte objects, the span for size class 38 contains 8 objects within a single page.
+Because a single 8 KB page fits exactly four 2048-byte objects, the span for size class 38 contains 4 objects within a single page.
 Conversely, since each 10880-byte object exceeds one page, the span for size class 55 spans 4 pages, accommodating 3 objects.
 
 But why doesn't a span of [size class 55](https://github.com/golang/go/blob/go1.24.0/src/runtime/sizeclasses.go#L61) contain only one object and stretch over 2 pages, as described in the below figure?
